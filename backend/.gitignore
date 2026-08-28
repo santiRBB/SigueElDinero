@@ -1,4 +1,11 @@
-.env
+# Python
+__pycache__/
+*.pyc
 .venv
 .venv-broken
-salida_aecid
+
+# Datos generados por la ingesta (regenerables via ingesta_aecid.py)
+salida_aecid/
+
+# Credenciales - nunca deben subirse
+.env
