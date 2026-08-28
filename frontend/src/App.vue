@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import MapaView from './views/MapaView.vue'
+import AppHeader from './components/AppHeader.vue'
+import AppFooter from './components/AppFooter.vue'
 </script>
 
 <template>
-  <MapaView />
+  <AppHeader />
+  <main>
+    <div class="wrap">
+      <router-view />
+    </div>
+  </main>
+  <AppFooter />
 </template>
