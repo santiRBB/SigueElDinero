@@ -1,0 +1,4 @@
+diterator
+psycopg2-binary
+pycountry
+python-dotenv
