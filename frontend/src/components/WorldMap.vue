@@ -44,6 +44,7 @@ onMounted(() => {
 const seriesData = computed(() =>
   props.paisesResumen.map((p) => ({
     name: p.iso_alpha3,
+    nombre: p.nombre,
     value: p.importe_total_eur > 0 ? Math.log10(p.importe_total_eur) : 0,
     importeReal: p.importe_total_eur,
     n: p.n_intervenciones,
@@ -62,11 +63,12 @@ function formatEUR(valor: number): string {
 const option = computed(() => ({
   tooltip: {
     trigger: 'item' as const,
-    formatter: (params: { name: string; data?: { importeReal: number; n: number } }) => {
+    formatter: (params: { name: string; data?: { nombre?: string; importeReal: number; n: number } }) => {
+      const nombre = params.data?.nombre ?? params.name
       if (!params.data) {
-        return `${params.name}<br/>Sin datos`
+        return `${nombre}<br/>Sin datos`
       }
-      return `${params.name}<br/>${formatEUR(params.data.importeReal)}<br/>${params.data.n} proyecto(s)`
+      return `${nombre}<br/>${formatEUR(params.data.importeReal)}<br/>${params.data.n} proyecto(s)`
     },
   },
   visualMap: {

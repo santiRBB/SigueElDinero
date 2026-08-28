@@ -6,6 +6,7 @@ interface GastoState {
   paisesResumen: PaisResumen[]
   paisSeleccionado: string | null
   detallePais: PaisDetalle | null
+  detalleError: string | null
   aniosDisponibles: number[]
   sectoresDisponibles: Sector[]
   filtroAnio: number | null
@@ -26,6 +27,7 @@ export const useGastoStore = defineStore('gasto', {
     paisesResumen: [],
     paisSeleccionado: null,
     detallePais: null,
+    detalleError: null,
     aniosDisponibles: [],
     sectoresDisponibles: [],
     filtroAnio: null,
@@ -35,9 +37,13 @@ export const useGastoStore = defineStore('gasto', {
   }),
   actions: {
     async cargarFiltros() {
-      const [anios, sectores] = await Promise.all([getAnios(), getSectores()])
-      this.aniosDisponibles = anios
-      this.sectoresDisponibles = sectores
+      try {
+        const [anios, sectores] = await Promise.all([getAnios(), getSectores()])
+        this.aniosDisponibles = anios
+        this.sectoresDisponibles = sectores
+      } catch (e) {
+        this.error = (e as Error).message
+      }
     },
     async cargarResumen() {
       const token = ++resumenRequestToken
@@ -51,21 +57,29 @@ export const useGastoStore = defineStore('gasto', {
         if (token !== resumenRequestToken) return
         this.error = (e as Error).message
       } finally {
-        if (token !== resumenRequestToken) return
-        this.cargando = false
+        if (token === resumenRequestToken) {
+          this.cargando = false
+        }
       }
     },
     async seleccionarPais(iso3: string) {
       const token = ++detalleRequestToken
       this.paisSeleccionado = iso3
       this.detallePais = null
-      const data = await getDetallePais(iso3, this.filtroAnio ?? undefined)
-      if (token !== detalleRequestToken) return
-      this.detallePais = data
+      this.detalleError = null
+      try {
+        const data = await getDetallePais(iso3, this.filtroAnio ?? undefined)
+        if (token !== detalleRequestToken) return
+        this.detallePais = data
+      } catch (e) {
+        if (token !== detalleRequestToken) return
+        this.detalleError = (e as Error).message
+      }
     },
     cerrarPanel() {
       this.paisSeleccionado = null
       this.detallePais = null
+      this.detalleError = null
     },
     async setFiltroAnio(anio: number | null) {
       this.filtroAnio = anio

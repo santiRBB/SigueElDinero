@@ -7,9 +7,8 @@ import FilterBar from '../components/FilterBar.vue'
 
 const store = useGastoStore()
 
-onMounted(async () => {
-  await store.cargarFiltros()
-  await store.cargarResumen()
+onMounted(() => {
+  void Promise.all([store.cargarFiltros(), store.cargarResumen()])
 })
 
 function onCountryClick(iso3: string) {
@@ -19,6 +18,7 @@ function onCountryClick(iso3: string) {
 
 <template>
   <div class="mapa-view">
+    <p v-if="store.error" class="error">{{ store.error }}</p>
     <FilterBar />
     <WorldMap class="mapa" :paises-resumen="store.paisesResumen" @country-click="onCountryClick" />
     <CountryPanel />
@@ -33,5 +33,11 @@ function onCountryClick(iso3: string) {
 }
 .mapa {
   flex: 1;
+}
+.error {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 </style>

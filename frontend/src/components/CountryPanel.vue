@@ -38,6 +38,7 @@ function formatEUR(valor: number): string {
         />
       </section>
     </template>
+    <p v-else-if="store.detalleError" class="error">Sin datos de cooperación registrados para este país</p>
     <p v-else>Cargando…</p>
   </aside>
 </template>
@@ -56,5 +57,9 @@ function formatEUR(valor: number): string {
 }
 .cerrar {
   float: right;
+}
+.error {
+  clear: both;
+  color: #b91c1c;
 }
 </style>

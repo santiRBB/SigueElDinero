@@ -57,6 +57,17 @@ describe('gastoStore', () => {
     expect(store.detallePais).toEqual(mockDetalle)
   })
 
+  it('seleccionarPais catches a failed detail fetch into detalleError', async () => {
+    vi.mocked(api.getDetallePais).mockRejectedValue(new Error('Error 404 al llamar a /api/paises/XYZ/detalle'))
+
+    const store = useGastoStore()
+    await store.seleccionarPais('XYZ')
+
+    expect(store.paisSeleccionado).toBe('XYZ')
+    expect(store.detallePais).toBeNull()
+    expect(store.detalleError).toBe('Error 404 al llamar a /api/paises/XYZ/detalle')
+  })
+
   it('cerrarPanel clears the selected country and its detail', async () => {
     vi.mocked(api.getDetallePais).mockResolvedValue({ pais: { iso_alpha3: 'COL', nombre: 'Colombia', region: null }, categorias: [], proyectos: [] })
     const store = useGastoStore()
@@ -142,5 +153,17 @@ describe('gastoStore', () => {
 
     expect(store.aniosDisponibles).toEqual([2023, 2024, 2025])
     expect(store.sectoresDisponibles).toEqual([{ codigo_crs: '72050', nombre: 'Ayuda humanitaria' }])
+  })
+
+  it('cargarFiltros records the error message when the API call fails', async () => {
+    vi.mocked(api.getAnios).mockRejectedValue(new Error('Error 500 al llamar a /api/filtros/anios'))
+    vi.mocked(api.getSectores).mockResolvedValue([])
+
+    const store = useGastoStore()
+    await store.cargarFiltros()
+
+    expect(store.error).toBe('Error 500 al llamar a /api/filtros/anios')
+    expect(store.aniosDisponibles).toEqual([])
+    expect(store.sectoresDisponibles).toEqual([])
   })
 })

@@ -28,7 +28,7 @@ function onSectorChange(event: Event) {
       <select :value="store.filtroSector ?? ''" @change="onSectorChange">
         <option value="">Todos</option>
         <option v-for="sector in store.sectoresDisponibles" :key="sector.codigo_crs" :value="sector.codigo_crs">
-          {{ sector.nombre }}
+          {{ sector.nombre ?? sector.codigo_crs }}
         </option>
       </select>
     </label>
