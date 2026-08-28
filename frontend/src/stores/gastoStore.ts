@@ -67,6 +67,7 @@ export const useGastoStore = defineStore('gasto', {
   }),
   actions: {
     async cargarFiltros() {
+      this.error = null
       try {
         const [anios, grupos] = await Promise.all([getAnios(), getSectores()])
         this.aniosDisponibles = anios
@@ -94,6 +95,7 @@ export const useGastoStore = defineStore('gasto', {
     },
     async cargarResumenPorAnio() {
       const token = ++porAnioRequestToken
+      this.error = null
       try {
         const data = await getResumenPorAnio(this.filtroGrupo ?? undefined)
         if (token !== porAnioRequestToken) return
@@ -105,6 +107,7 @@ export const useGastoStore = defineStore('gasto', {
     },
     async cargarResumenPorGrupo() {
       const token = ++porGrupoRequestToken
+      this.error = null
       try {
         const data = await getResumenPorGrupo(this.filtroAnio ?? undefined)
         if (token !== porGrupoRequestToken) return

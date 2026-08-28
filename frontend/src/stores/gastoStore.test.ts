@@ -163,6 +163,20 @@ describe('gastoStore', () => {
     expect(store.error).toBe('Error 500 al llamar a /api/filtros/anios')
   })
 
+  it('cargarFiltros clears a previous error once a later call succeeds', async () => {
+    vi.mocked(api.getAnios).mockRejectedValueOnce(new Error('Error 500 al llamar a /api/filtros/anios'))
+    vi.mocked(api.getSectores).mockResolvedValue([])
+
+    const store = useGastoStore()
+    await store.cargarFiltros()
+    expect(store.error).toBe('Error 500 al llamar a /api/filtros/anios')
+
+    vi.mocked(api.getAnios).mockResolvedValueOnce([2023, 2024, 2025])
+    await store.cargarFiltros()
+
+    expect(store.error).toBeNull()
+  })
+
   it('cargarResumenPorAnio and cargarResumenPorGrupo store their results', async () => {
     vi.mocked(api.getResumenPorAnio).mockResolvedValue([{ anio: 2024, importe_eur: 100, n_intervenciones: 2 }])
     vi.mocked(api.getResumenPorGrupo).mockResolvedValue([{ codigo_grupo: '720', nombre: 'Emergency Response', importe_eur: 500, n_intervenciones: 1 }])
