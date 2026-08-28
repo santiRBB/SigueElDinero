@@ -12,6 +12,7 @@ function proyecto(overrides: Partial<Proyecto>): Proyecto {
     porcentaje_fuente: 'declared',
     start_date: '2024-10-01',
     end_date: null,
+    url_fuente: null,
     ...overrides,
   }
 }
