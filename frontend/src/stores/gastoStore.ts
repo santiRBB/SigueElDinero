@@ -1,46 +1,76 @@
 import { defineStore } from 'pinia'
-import { getAnios, getDetallePais, getResumenPaises, getSectores } from '../services/api'
-import type { PaisDetalle, PaisResumen, Sector } from '../services/api'
+import {
+  buscarProyectos as apiBuscarProyectos,
+  getAnios,
+  getDetallePais,
+  getPaisPorAnio,
+  getResumenPaises,
+  getResumenPorAnio,
+  getResumenPorGrupo,
+  getSectores,
+} from '../services/api'
+import type { AnioImporte, Grupo, GrupoImporte, PaisDetalle, PaisResumen, ProyectoBusqueda } from '../services/api'
 
 interface GastoState {
   paisesResumen: PaisResumen[]
-  paisSeleccionado: string | null
   detallePais: PaisDetalle | null
   detalleError: string | null
+  paisPorAnio: AnioImporte[]
   aniosDisponibles: number[]
-  sectoresDisponibles: Sector[]
+  gruposDisponibles: Grupo[]
   filtroAnio: number | null
-  filtroSector: string | null
+  filtroGrupo: string | null
   cargando: boolean
   error: string | null
+  resumenPorAnio: AnioImporte[]
+  resumenPorGrupo: GrupoImporte[]
+  resultadosBusqueda: ProyectoBusqueda[]
+  totalBusqueda: number
+  queryBusqueda: string
+  paginaBusqueda: number
+  cargandoBusqueda: boolean
+  errorBusqueda: string | null
 }
 
-// Module-scoped request tokens to guard against stale out-of-order async
-// responses overwriting newer state. useGastoStore() is a singleton in this
-// app, so plain module-level counters are sufficient and keep these
-// implementation details out of the store's public reactive state.
+// Module-scoped request tokens guard against stale out-of-order async
+// responses overwriting newer state, one per independently-triggered fetch.
+// useGastoStore() is a singleton in this app, so plain module-level counters
+// are sufficient and keep these implementation details out of the store's
+// public reactive state.
 let resumenRequestToken = 0
 let detalleRequestToken = 0
+let porAnioRequestToken = 0
+let porGrupoRequestToken = 0
+let paisPorAnioRequestToken = 0
+let busquedaRequestToken = 0
 
 export const useGastoStore = defineStore('gasto', {
   state: (): GastoState => ({
     paisesResumen: [],
-    paisSeleccionado: null,
     detallePais: null,
     detalleError: null,
+    paisPorAnio: [],
     aniosDisponibles: [],
-    sectoresDisponibles: [],
+    gruposDisponibles: [],
     filtroAnio: null,
-    filtroSector: null,
+    filtroGrupo: null,
     cargando: false,
     error: null,
+    resumenPorAnio: [],
+    resumenPorGrupo: [],
+    resultadosBusqueda: [],
+    totalBusqueda: 0,
+    queryBusqueda: '',
+    paginaBusqueda: 1,
+    cargandoBusqueda: false,
+    errorBusqueda: null,
   }),
   actions: {
     async cargarFiltros() {
       try {
-        const [anios, sectores] = await Promise.all([getAnios(), getSectores()])
+        const [anios, grupos] = await Promise.all([getAnios(), getSectores()])
         this.aniosDisponibles = anios
-        this.sectoresDisponibles = sectores
+        this.gruposDisponibles = grupos
       } catch (e) {
         this.error = (e as Error).message
       }
@@ -50,7 +80,7 @@ export const useGastoStore = defineStore('gasto', {
       this.cargando = true
       this.error = null
       try {
-        const data = await getResumenPaises(this.filtroAnio ?? undefined, this.filtroSector ?? undefined)
+        const data = await getResumenPaises(this.filtroAnio ?? undefined, this.filtroGrupo ?? undefined)
         if (token !== resumenRequestToken) return
         this.paisesResumen = data
       } catch (e) {
@@ -62,9 +92,30 @@ export const useGastoStore = defineStore('gasto', {
         }
       }
     },
+    async cargarResumenPorAnio() {
+      const token = ++porAnioRequestToken
+      try {
+        const data = await getResumenPorAnio(this.filtroGrupo ?? undefined)
+        if (token !== porAnioRequestToken) return
+        this.resumenPorAnio = data
+      } catch (e) {
+        if (token !== porAnioRequestToken) return
+        this.error = (e as Error).message
+      }
+    },
+    async cargarResumenPorGrupo() {
+      const token = ++porGrupoRequestToken
+      try {
+        const data = await getResumenPorGrupo(this.filtroAnio ?? undefined)
+        if (token !== porGrupoRequestToken) return
+        this.resumenPorGrupo = data
+      } catch (e) {
+        if (token !== porGrupoRequestToken) return
+        this.error = (e as Error).message
+      }
+    },
     async seleccionarPais(iso3: string) {
       const token = ++detalleRequestToken
-      this.paisSeleccionado = iso3
       this.detallePais = null
       this.detalleError = null
       try {
@@ -76,18 +127,48 @@ export const useGastoStore = defineStore('gasto', {
         this.detalleError = (e as Error).message
       }
     },
-    cerrarPanel() {
-      this.paisSeleccionado = null
-      this.detallePais = null
-      this.detalleError = null
+    async cargarPaisPorAnio(iso3: string) {
+      const token = ++paisPorAnioRequestToken
+      try {
+        const data = await getPaisPorAnio(iso3, this.filtroGrupo ?? undefined)
+        if (token !== paisPorAnioRequestToken) return
+        this.paisPorAnio = data
+      } catch {
+        if (token !== paisPorAnioRequestToken) return
+        this.paisPorAnio = []
+      }
     },
     async setFiltroAnio(anio: number | null) {
       this.filtroAnio = anio
-      await this.cargarResumen()
+      await Promise.all([this.cargarResumen(), this.cargarResumenPorGrupo()])
     },
-    async setFiltroSector(sector: string | null) {
-      this.filtroSector = sector
-      await this.cargarResumen()
+    async setFiltroGrupo(grupo: string | null) {
+      this.filtroGrupo = grupo
+      await Promise.all([this.cargarResumen(), this.cargarResumenPorAnio()])
+    },
+    async buscarProyectos(pagina = 1) {
+      const token = ++busquedaRequestToken
+      this.cargandoBusqueda = true
+      this.errorBusqueda = null
+      try {
+        const data = await apiBuscarProyectos({
+          q: this.queryBusqueda || undefined,
+          anio: this.filtroAnio ?? undefined,
+          grupo: this.filtroGrupo ?? undefined,
+          pagina,
+        })
+        if (token !== busquedaRequestToken) return
+        this.resultadosBusqueda = data.resultados
+        this.totalBusqueda = data.total
+        this.paginaBusqueda = data.pagina
+      } catch (e) {
+        if (token !== busquedaRequestToken) return
+        this.errorBusqueda = (e as Error).message
+      } finally {
+        if (token === busquedaRequestToken) {
+          this.cargandoBusqueda = false
+        }
+      }
     },
   },
 })

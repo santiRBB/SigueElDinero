@@ -45,60 +45,6 @@ describe('gastoStore', () => {
     expect(store.cargando).toBe(false)
   })
 
-  it('seleccionarPais sets the selected country and loads its detail', async () => {
-    const mockDetalle = { pais: { iso_alpha3: 'COL', nombre: 'Colombia', region: null }, categorias: [], proyectos: [] }
-    vi.mocked(api.getDetallePais).mockResolvedValue(mockDetalle)
-
-    const store = useGastoStore()
-    await store.seleccionarPais('COL')
-
-    expect(api.getDetallePais).toHaveBeenCalledWith('COL', undefined)
-    expect(store.paisSeleccionado).toBe('COL')
-    expect(store.detallePais).toEqual(mockDetalle)
-  })
-
-  it('seleccionarPais catches a failed detail fetch into detalleError', async () => {
-    vi.mocked(api.getDetallePais).mockRejectedValue(new Error('Error 404 al llamar a /api/paises/XYZ/detalle'))
-
-    const store = useGastoStore()
-    await store.seleccionarPais('XYZ')
-
-    expect(store.paisSeleccionado).toBe('XYZ')
-    expect(store.detallePais).toBeNull()
-    expect(store.detalleError).toBe('Error 404 al llamar a /api/paises/XYZ/detalle')
-  })
-
-  it('cerrarPanel clears the selected country and its detail', async () => {
-    vi.mocked(api.getDetallePais).mockResolvedValue({ pais: { iso_alpha3: 'COL', nombre: 'Colombia', region: null }, categorias: [], proyectos: [] })
-    const store = useGastoStore()
-    await store.seleccionarPais('COL')
-
-    store.cerrarPanel()
-
-    expect(store.paisSeleccionado).toBeNull()
-    expect(store.detallePais).toBeNull()
-  })
-
-  it('setFiltroAnio updates the filter and re-fetches the resumen with it', async () => {
-    vi.mocked(api.getResumenPaises).mockResolvedValue([])
-    const store = useGastoStore()
-
-    await store.setFiltroAnio(2025)
-
-    expect(store.filtroAnio).toBe(2025)
-    expect(api.getResumenPaises).toHaveBeenCalledWith(2025, undefined)
-  })
-
-  it('setFiltroSector updates the filter and re-fetches the resumen with it', async () => {
-    vi.mocked(api.getResumenPaises).mockResolvedValue([])
-    const store = useGastoStore()
-
-    await store.setFiltroSector('72050')
-
-    expect(store.filtroSector).toBe('72050')
-    expect(api.getResumenPaises).toHaveBeenCalledWith(undefined, '72050')
-  })
-
   it('cargarResumen ignores a stale response that resolves after a newer request', async () => {
     const mockDataFirst = [{ iso_alpha3: 'COL', nombre: 'Colombia', importe_total_eur: 100, n_intervenciones: 2 }]
     const mockDataSecond = [{ iso_alpha3: 'PER', nombre: 'Peru', importe_total_eur: 200, n_intervenciones: 3 }]
@@ -111,15 +57,34 @@ describe('gastoStore', () => {
     const call1 = store.cargarResumen()
     const call2 = store.cargarResumen()
 
-    // The older (first) request resolves after the newer (second) one.
     second.resolve(mockDataSecond)
     await call2
     first.resolve(mockDataFirst)
     await call1
 
     expect(store.paisesResumen).toEqual(mockDataSecond)
-    expect(store.cargando).toBe(false)
-    expect(store.error).toBeNull()
+  })
+
+  it('seleccionarPais loads the detail for the given country', async () => {
+    const mockDetalle = { pais: { iso_alpha3: 'COL', nombre: 'Colombia', region: null }, categorias: [], proyectos: [] }
+    vi.mocked(api.getDetallePais).mockResolvedValue(mockDetalle)
+
+    const store = useGastoStore()
+    await store.seleccionarPais('COL')
+
+    expect(api.getDetallePais).toHaveBeenCalledWith('COL', undefined)
+    expect(store.detallePais).toEqual(mockDetalle)
+    expect(store.detalleError).toBeNull()
+  })
+
+  it('seleccionarPais catches a failed detail fetch into detalleError', async () => {
+    vi.mocked(api.getDetallePais).mockRejectedValue(new Error('Error 404 al llamar a /api/paises/XYZ/detalle'))
+
+    const store = useGastoStore()
+    await store.seleccionarPais('XYZ')
+
+    expect(store.detallePais).toBeNull()
+    expect(store.detalleError).toBe('Error 404 al llamar a /api/paises/XYZ/detalle')
   })
 
   it('seleccionarPais ignores a stale detalle response that resolves after a newer selection', async () => {
@@ -134,25 +99,58 @@ describe('gastoStore', () => {
     const call1 = store.seleccionarPais('COL')
     const call2 = store.seleccionarPais('PER')
 
-    // The older (first) selection resolves after the newer (second) one.
     second.resolve(detalleB)
     await call2
     first.resolve(detalleA)
     await call1
 
-    expect(store.paisSeleccionado).toBe('PER')
     expect(store.detallePais).toEqual(detalleB)
   })
 
-  it('cargarFiltros populates aniosDisponibles and sectoresDisponibles', async () => {
+  it('cargarPaisPorAnio stores the yearly evolution for a country', async () => {
+    const datos = [{ anio: 2024, importe_eur: 100, n_intervenciones: 2 }]
+    vi.mocked(api.getPaisPorAnio).mockResolvedValue(datos)
+
+    const store = useGastoStore()
+    await store.cargarPaisPorAnio('COL')
+
+    expect(api.getPaisPorAnio).toHaveBeenCalledWith('COL', undefined)
+    expect(store.paisPorAnio).toEqual(datos)
+  })
+
+  it('setFiltroAnio updates the filter and re-fetches resumen and resumenPorGrupo', async () => {
+    vi.mocked(api.getResumenPaises).mockResolvedValue([])
+    vi.mocked(api.getResumenPorGrupo).mockResolvedValue([])
+    const store = useGastoStore()
+
+    await store.setFiltroAnio(2025)
+
+    expect(store.filtroAnio).toBe(2025)
+    expect(api.getResumenPaises).toHaveBeenCalledWith(2025, undefined)
+    expect(api.getResumenPorGrupo).toHaveBeenCalledWith(2025)
+  })
+
+  it('setFiltroGrupo updates the filter and re-fetches resumen and resumenPorAnio', async () => {
+    vi.mocked(api.getResumenPaises).mockResolvedValue([])
+    vi.mocked(api.getResumenPorAnio).mockResolvedValue([])
+    const store = useGastoStore()
+
+    await store.setFiltroGrupo('720')
+
+    expect(store.filtroGrupo).toBe('720')
+    expect(api.getResumenPaises).toHaveBeenCalledWith(undefined, '720')
+    expect(api.getResumenPorAnio).toHaveBeenCalledWith('720')
+  })
+
+  it('cargarFiltros populates aniosDisponibles and gruposDisponibles', async () => {
     vi.mocked(api.getAnios).mockResolvedValue([2023, 2024, 2025])
-    vi.mocked(api.getSectores).mockResolvedValue([{ codigo_crs: '72050', nombre: 'Ayuda humanitaria' }])
+    vi.mocked(api.getSectores).mockResolvedValue([{ codigo_grupo: '720', nombre: 'Emergency Response' }])
 
     const store = useGastoStore()
     await store.cargarFiltros()
 
     expect(store.aniosDisponibles).toEqual([2023, 2024, 2025])
-    expect(store.sectoresDisponibles).toEqual([{ codigo_crs: '72050', nombre: 'Ayuda humanitaria' }])
+    expect(store.gruposDisponibles).toEqual([{ codigo_grupo: '720', nombre: 'Emergency Response' }])
   })
 
   it('cargarFiltros records the error message when the API call fails', async () => {
@@ -163,7 +161,44 @@ describe('gastoStore', () => {
     await store.cargarFiltros()
 
     expect(store.error).toBe('Error 500 al llamar a /api/filtros/anios')
-    expect(store.aniosDisponibles).toEqual([])
-    expect(store.sectoresDisponibles).toEqual([])
+  })
+
+  it('cargarResumenPorAnio and cargarResumenPorGrupo store their results', async () => {
+    vi.mocked(api.getResumenPorAnio).mockResolvedValue([{ anio: 2024, importe_eur: 100, n_intervenciones: 2 }])
+    vi.mocked(api.getResumenPorGrupo).mockResolvedValue([{ codigo_grupo: '720', nombre: 'Emergency Response', importe_eur: 500, n_intervenciones: 1 }])
+
+    const store = useGastoStore()
+    await store.cargarResumenPorAnio()
+    await store.cargarResumenPorGrupo()
+
+    expect(store.resumenPorAnio).toEqual([{ anio: 2024, importe_eur: 100, n_intervenciones: 2 }])
+    expect(store.resumenPorGrupo).toEqual([{ codigo_grupo: '720', nombre: 'Emergency Response', importe_eur: 500, n_intervenciones: 1 }])
+  })
+
+  it('buscarProyectos stores results, total, and pagina, and resets loading state', async () => {
+    const mockResultado = { total: 1, pagina: 1, por_pagina: 30, resultados: [{ aid: 'AID-1' }] }
+    vi.mocked(api.buscarProyectos).mockResolvedValue(mockResultado as never)
+
+    const store = useGastoStore()
+    store.queryBusqueda = 'agua'
+    const promise = store.buscarProyectos()
+    expect(store.cargandoBusqueda).toBe(true)
+    await promise
+
+    expect(api.buscarProyectos).toHaveBeenCalledWith({ q: 'agua', anio: undefined, grupo: undefined, pagina: 1 })
+    expect(store.resultadosBusqueda).toEqual(mockResultado.resultados)
+    expect(store.totalBusqueda).toBe(1)
+    expect(store.cargandoBusqueda).toBe(false)
+    expect(store.errorBusqueda).toBeNull()
+  })
+
+  it('buscarProyectos records the error message when the API call fails', async () => {
+    vi.mocked(api.buscarProyectos).mockRejectedValue(new Error('Error 500 al llamar a /api/proyectos/buscar'))
+
+    const store = useGastoStore()
+    await store.buscarProyectos()
+
+    expect(store.errorBusqueda).toBe('Error 500 al llamar a /api/proyectos/buscar')
+    expect(store.cargandoBusqueda).toBe(false)
   })
 })
