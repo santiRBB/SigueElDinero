@@ -6,6 +6,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import json
+from pathlib import Path
+
+_CRS_GRUPOS_PATH = Path(__file__).parent / "crs_grupos.json"
+with open(_CRS_GRUPOS_PATH, encoding="utf-8") as f:
+    CRS_GRUPOS: dict[str, str] = json.load(f)
+
+
+def _nombre_grupo(codigo_grupo: str | None) -> str | None:
+    if codigo_grupo is None:
+        return None
+    return CRS_GRUPOS.get(codigo_grupo)
+
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
@@ -17,7 +31,7 @@ def get_connection():
     return psycopg2.connect(DATABASE_URL)
 
 
-def resumen_paises(anio: int | None = None, sector: str | None = None) -> list[dict]:
+def resumen_paises(anio: int | None = None, grupo: str | None = None) -> list[dict]:
     sql = """
         select p.iso_alpha3, p.nombre,
                coalesce(sum(f.importe_pais_eur), 0) as importe_total_eur,
@@ -31,9 +45,9 @@ def resumen_paises(anio: int | None = None, sector: str | None = None) -> list[d
     if anio is not None:
         sql += " and extract(year from f.start_date) = %s"
         params.append(anio)
-    if sector is not None:
-        sql += " and c.codigo_crs = %s"
-        params.append(sector)
+    if grupo is not None:
+        sql += " and substring(c.codigo_crs from 1 for 3) = %s"
+        params.append(grupo)
     sql += " group by p.iso_alpha3, p.nombre order by importe_total_eur desc"
 
     conn = get_connection()
@@ -58,7 +72,7 @@ def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
                 return None
 
             cat_sql = """
-                select c.codigo_crs, c.nombre,
+                select substring(c.codigo_crs from 1 for 3) as codigo_grupo,
                        coalesce(sum(f.importe_pais_eur), 0) as importe_eur,
                        count(distinct f.aid) as n_intervenciones
                 from fact_gasto f
@@ -70,9 +84,11 @@ def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
             if anio is not None:
                 cat_sql += " and extract(year from f.start_date) = %s"
                 cat_params.append(anio)
-            cat_sql += " group by c.codigo_crs, c.nombre order by importe_eur desc"
+            cat_sql += " group by codigo_grupo order by importe_eur desc"
             cur.execute(cat_sql, cat_params)
             categorias = cur.fetchall()
+            for cat in categorias:
+                cat["nombre"] = _nombre_grupo(cat["codigo_grupo"])
 
             proy_sql = """
                 select f.aid, f.titulo, o.nombre as organismo_ejecutor,
@@ -116,8 +132,20 @@ def anios_disponibles() -> list[int]:
 def sectores_disponibles() -> list[dict]:
     conn = get_connection()
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("select codigo_crs, nombre from dim_categoria order by nombre")
-            return cur.fetchall()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select distinct substring(codigo_crs from 1 for 3) as codigo_grupo
+                from dim_categoria
+                where codigo_crs is not null
+                order by codigo_grupo
+                """
+            )
+            codigos = [row[0] for row in cur.fetchall()]
     finally:
         conn.close()
+    return [
+        {"codigo_grupo": codigo, "nombre": _nombre_grupo(codigo)}
+        for codigo in codigos
+        if _nombre_grupo(codigo) is not None
+    ]

@@ -47,20 +47,20 @@ def test_resumen_paises_without_filters(monkeypatch):
     sql, params = cursor.executed[0]
     assert params == []
     assert "extract(year from f.start_date)" not in sql
-    assert "c.codigo_crs" not in sql
+    assert "substring(c.codigo_crs" not in sql
 
 
-def test_resumen_paises_applies_anio_and_sector_filters(monkeypatch):
+def test_resumen_paises_applies_anio_and_grupo_filters(monkeypatch):
     cursor = FakeCursor(rows=[])
     conn = FakeConnection(cursor)
     monkeypatch.setattr(db, "get_connection", lambda: conn)
 
-    db.resumen_paises(anio=2025, sector="72050")
+    db.resumen_paises(anio=2025, grupo="720")
 
     sql, params = cursor.executed[0]
-    assert params == [2025, "72050"]
+    assert params == [2025, "720"]
     assert "extract(year from f.start_date) = %s" in sql
-    assert "c.codigo_crs = %s" in sql
+    assert "substring(c.codigo_crs from 1 for 3) = %s" in sql
 
 
 def test_detalle_pais_returns_none_when_country_not_found(monkeypatch):
@@ -76,7 +76,7 @@ def test_detalle_pais_returns_none_when_country_not_found(monkeypatch):
 
 def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
     pais_row = {"iso_alpha3": "COL", "nombre": "Colombia", "region": "LatAm"}
-    categorias_rows = [{"codigo_crs": "72050", "nombre": "Ayuda humanitaria", "importe_eur": 500.0, "n_intervenciones": 1}]
+    categorias_rows = [{"codigo_grupo": "720", "importe_eur": 500.0, "n_intervenciones": 1}]
     proyectos_rows = [{
         "aid": "AID-1", "titulo": "Proyecto X", "organismo_ejecutor": "ONG Y",
         "importe_pais_eur": 500.0, "porcentaje_pais": 100.0, "porcentaje_fuente": "declared",
@@ -101,7 +101,6 @@ def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
             return rows
 
     cursor = MultiQueryCursor()
-    # first execute() is the pais lookup (uses fetchone), so advance _call after it manually
     original_fetchone = cursor.fetchone
 
     def fetchone_then_advance():
@@ -116,7 +115,10 @@ def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
     result = db.detalle_pais("COL", anio=2024)
 
     assert result["pais"] == pais_row
-    assert result["categorias"] == categorias_rows
+    assert result["categorias"] == [{
+        "codigo_grupo": "720", "importe_eur": 500.0, "n_intervenciones": 1,
+        "nombre": "Emergency Response",
+    }]
     assert result["proyectos"] == proyectos_rows
     assert len(cursor.executed) == 3
     for _, params in cursor.executed[1:]:
@@ -133,9 +135,13 @@ def test_anios_disponibles(monkeypatch):
 
 
 def test_sectores_disponibles(monkeypatch):
-    rows = [{"codigo_crs": "72050", "nombre": "Ayuda humanitaria"}]
-    cursor = FakeCursor(rows=rows)
+    cursor = FakeCursor(rows=[("140",), ("720",)])
     conn = FakeConnection(cursor)
     monkeypatch.setattr(db, "get_connection", lambda: conn)
 
-    assert db.sectores_disponibles() == rows
+    result = db.sectores_disponibles()
+
+    assert result == [
+        {"codigo_grupo": "140", "nombre": "Water Supply & Sanitation"},
+        {"codigo_grupo": "720", "nombre": "Emergency Response"},
+    ]
