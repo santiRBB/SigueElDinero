@@ -43,13 +43,21 @@ def test_detalle_returns_404_when_country_not_found(monkeypatch):
 
 def test_detalle_returns_data_when_found(monkeypatch):
     fake = {"pais": {"iso_alpha3": "COL", "nombre": "Colombia", "region": None}, "categorias": [], "proyectos": []}
-    monkeypatch.setattr(main, "detalle_pais", lambda iso_alpha3, anio=None: fake)
+    called_with = {}
+
+    def fake_detalle(iso_alpha3, anio=None):
+        called_with["iso_alpha3"] = iso_alpha3
+        called_with["anio"] = anio
+        return fake
+
+    monkeypatch.setattr(main, "detalle_pais", fake_detalle)
     client = TestClient(main.app)
 
     resp = client.get("/api/paises/col/detalle", params={"anio": 2024})
 
     assert resp.status_code == 200
     assert resp.json() == fake
+    assert called_with == {"iso_alpha3": "COL", "anio": 2024}
 
 
 def test_anios_endpoint(monkeypatch):
