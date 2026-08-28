@@ -5,6 +5,16 @@ import { useGastoStore } from './gastoStore'
 
 vi.mock('../services/api')
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('gastoStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -76,6 +86,51 @@ describe('gastoStore', () => {
 
     expect(store.filtroSector).toBe('72050')
     expect(api.getResumenPaises).toHaveBeenCalledWith(undefined, '72050')
+  })
+
+  it('cargarResumen ignores a stale response that resolves after a newer request', async () => {
+    const mockDataFirst = [{ iso_alpha3: 'COL', nombre: 'Colombia', importe_total_eur: 100, n_intervenciones: 2 }]
+    const mockDataSecond = [{ iso_alpha3: 'PER', nombre: 'Peru', importe_total_eur: 200, n_intervenciones: 3 }]
+    const first = deferred<typeof mockDataFirst>()
+    const second = deferred<typeof mockDataSecond>()
+
+    vi.mocked(api.getResumenPaises).mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise)
+
+    const store = useGastoStore()
+    const call1 = store.cargarResumen()
+    const call2 = store.cargarResumen()
+
+    // The older (first) request resolves after the newer (second) one.
+    second.resolve(mockDataSecond)
+    await call2
+    first.resolve(mockDataFirst)
+    await call1
+
+    expect(store.paisesResumen).toEqual(mockDataSecond)
+    expect(store.cargando).toBe(false)
+    expect(store.error).toBeNull()
+  })
+
+  it('seleccionarPais ignores a stale detalle response that resolves after a newer selection', async () => {
+    const detalleA = { pais: { iso_alpha3: 'COL', nombre: 'Colombia', region: null }, categorias: [], proyectos: [] }
+    const detalleB = { pais: { iso_alpha3: 'PER', nombre: 'Peru', region: null }, categorias: [], proyectos: [] }
+    const first = deferred<typeof detalleA>()
+    const second = deferred<typeof detalleB>()
+
+    vi.mocked(api.getDetallePais).mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise)
+
+    const store = useGastoStore()
+    const call1 = store.seleccionarPais('COL')
+    const call2 = store.seleccionarPais('PER')
+
+    // The older (first) selection resolves after the newer (second) one.
+    second.resolve(detalleB)
+    await call2
+    first.resolve(detalleA)
+    await call1
+
+    expect(store.paisSeleccionado).toBe('PER')
+    expect(store.detallePais).toEqual(detalleB)
   })
 
   it('cargarFiltros populates aniosDisponibles and sectoresDisponibles', async () => {

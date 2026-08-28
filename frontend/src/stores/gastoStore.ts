@@ -14,6 +14,13 @@ interface GastoState {
   error: string | null
 }
 
+// Module-scoped request tokens to guard against stale out-of-order async
+// responses overwriting newer state. useGastoStore() is a singleton in this
+// app, so plain module-level counters are sufficient and keep these
+// implementation details out of the store's public reactive state.
+let resumenRequestToken = 0
+let detalleRequestToken = 0
+
 export const useGastoStore = defineStore('gasto', {
   state: (): GastoState => ({
     paisesResumen: [],
@@ -33,20 +40,28 @@ export const useGastoStore = defineStore('gasto', {
       this.sectoresDisponibles = sectores
     },
     async cargarResumen() {
+      const token = ++resumenRequestToken
       this.cargando = true
       this.error = null
       try {
-        this.paisesResumen = await getResumenPaises(this.filtroAnio ?? undefined, this.filtroSector ?? undefined)
+        const data = await getResumenPaises(this.filtroAnio ?? undefined, this.filtroSector ?? undefined)
+        if (token !== resumenRequestToken) return
+        this.paisesResumen = data
       } catch (e) {
+        if (token !== resumenRequestToken) return
         this.error = (e as Error).message
       } finally {
+        if (token !== resumenRequestToken) return
         this.cargando = false
       }
     },
     async seleccionarPais(iso3: string) {
+      const token = ++detalleRequestToken
       this.paisSeleccionado = iso3
       this.detallePais = null
-      this.detallePais = await getDetallePais(iso3, this.filtroAnio ?? undefined)
+      const data = await getDetallePais(iso3, this.filtroAnio ?? undefined)
+      if (token !== detalleRequestToken) return
+      this.detallePais = data
     },
     cerrarPanel() {
       this.paisSeleccionado = null
