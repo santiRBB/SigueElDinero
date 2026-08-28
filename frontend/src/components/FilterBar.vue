@@ -8,27 +8,27 @@ function onAnioChange(event: Event) {
   store.setFiltroAnio(valor === '' ? null : Number(valor))
 }
 
-function onSectorChange(event: Event) {
+function onGrupoChange(event: Event) {
   const valor = (event.target as HTMLSelectElement).value
-  store.setFiltroSector(valor === '' ? null : valor)
+  store.setFiltroGrupo(valor === '' ? null : valor)
 }
 </script>
 
 <template>
-  <div class="filter-bar">
-    <label>
-      Año
+  <div class="controls">
+    <label class="ctl">
+      <span>Año</span>
       <select :value="store.filtroAnio ?? ''" @change="onAnioChange">
         <option value="">Todos</option>
         <option v-for="anio in store.aniosDisponibles" :key="anio" :value="anio">{{ anio }}</option>
       </select>
     </label>
-    <label>
-      Sector
-      <select :value="store.filtroSector ?? ''" @change="onSectorChange">
-        <option value="">Todos</option>
-        <option v-for="sector in store.sectoresDisponibles" :key="sector.codigo_crs" :value="sector.codigo_crs">
-          {{ sector.nombre ?? sector.codigo_crs }}
+    <label class="ctl">
+      <span>Sector</span>
+      <select :value="store.filtroGrupo ?? ''" @change="onGrupoChange">
+        <option value="">Todos los sectores</option>
+        <option v-for="grupo in store.gruposDisponibles" :key="grupo.codigo_grupo" :value="grupo.codigo_grupo">
+          {{ grupo.nombre }}
         </option>
       </select>
     </label>
@@ -36,15 +36,39 @@ function onSectorChange(event: Event) {
 </template>
 
 <style scoped>
-.filter-bar {
+.controls {
   display: flex;
-  gap: 1.5rem;
-  padding: 1rem;
+  gap: 14px;
+  flex-wrap: wrap;
 }
-label {
+.ctl {
   display: flex;
   flex-direction: column;
-  font-size: 0.875rem;
-  gap: 0.25rem;
+  gap: 5px;
+}
+.ctl span {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ctl select {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 7px 30px 7px 10px;
+  appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 15px, calc(100% - 10px) 15px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.ctl select:focus {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
 }
 </style>
