@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import MapaView from './views/MapaView.vue'
 </script>
 
 <template>
-  <div id="app"></div>
+  <MapaView />
 </template>
