@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useGastoStore } from '../stores/gastoStore'
 import FilterBar from '../components/FilterBar.vue'
 import ProjectCard from '../components/ProjectCard.vue'
@@ -20,6 +20,11 @@ function onInput(event: Event) {
 function irAPagina(pagina: number) {
   void store.buscarProyectos(pagina)
 }
+
+watch(
+  () => [store.filtroAnio, store.filtroGrupo],
+  () => { void store.buscarProyectos() },
+)
 
 const totalPaginas = computed(() => Math.max(1, Math.ceil(store.totalBusqueda / 30)))
 const totalPaginaActual = computed(() => store.resultadosBusqueda.reduce((acc, p) => acc + p.importe_pais_eur, 0))
