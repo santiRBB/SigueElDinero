@@ -2,3 +2,7 @@ diterator
 psycopg2-binary
 pycountry
 python-dotenv
+fastapi
+uvicorn[standard]
+pytest
+httpx
