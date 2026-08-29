@@ -1,0 +1,48 @@
+name: Ingesta diaria AECID
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # ~04:00 Madrid (CEST) / ~03:00 Madrid (CET) — cron de GH Actions es UTC fijo
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - run: python -m pytest -v
+        working-directory: backend
+
+  ingest:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - run: python ingesta_aecid.py
+        working-directory: backend
+      - run: python cargar_supabase.py
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: salida-aecid-${{ github.run_id }}
+          path: |
+            backend/salida_aecid/fact_gasto.jsonl
+            backend/salida_aecid/actividades_sin_pais.jsonl
+          retention-days: 14
