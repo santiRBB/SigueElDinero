@@ -9,8 +9,11 @@ import { feature } from 'topojson-client'
 import worldTopo from 'world-atlas/countries-110m.json'
 import isoMapping from '../assets/iso-numeric-to-alpha3.json'
 import type { PaisResumen } from '../services/api'
+import { formatEUR } from '../utils/formato'
 
 echarts.use([MapChart, TooltipComponent, VisualMapComponent, CanvasRenderer])
+
+const RAMP = ['#D7E2EB', '#A9C1D5', '#7699B8', '#43709A', '#1D4E7B', '#0B3B5C']
 
 const props = defineProps<{
   paisesResumen: PaisResumen[]
@@ -39,45 +42,61 @@ onMounted(() => {
   mapaListo.value = true
 })
 
-// visualMap has no native log scale, so amounts are pre-transformed with
-// log10 for coloring while the real amount travels alongside for the tooltip.
 const seriesData = computed(() =>
   props.paisesResumen.map((p) => ({
     name: p.iso_alpha3,
     nombre: p.nombre,
-    value: p.importe_total_eur > 0 ? Math.log10(p.importe_total_eur) : 0,
-    importeReal: p.importe_total_eur,
+    value: p.importe_total_eur,
     n: p.n_intervenciones,
   }))
 )
 
-const maxLog = computed(() => {
-  const maxImporte = props.paisesResumen.reduce((max, p) => Math.max(max, p.importe_total_eur), 1)
-  return Math.max(Math.log10(maxImporte), 1)
-})
-
-function formatEUR(valor: number): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(valor)
+// visualMap has no native quantile scale, so the 5 cut points are computed
+// by hand from the values actually present (same criterion as the design
+// reference's d3.scaleThreshold over quantiles). With fewer than 6 values
+// there aren't enough data points for meaningful quantiles, so we fall back
+// to evenly-spaced cuts between the min and max instead.
+function calcularCortes(valores: number[]): number[] {
+  const ordenados = [...valores].sort((a, b) => a - b)
+  if (ordenados.length === 0) return [1, 2, 3, 4, 5]
+  if (ordenados.length < 6) {
+    const min = ordenados[0]
+    const max = ordenados[ordenados.length - 1]
+    const paso = (max - min) / 6 || 1
+    return [1, 2, 3, 4, 5].map((i) => min + paso * i)
+  }
+  const cuantil = (p: number): number => {
+    const idx = p * (ordenados.length - 1)
+    const lo = Math.floor(idx)
+    const hi = Math.ceil(idx)
+    if (lo === hi) return ordenados[lo]
+    return ordenados[lo] + (ordenados[hi] - ordenados[lo]) * (idx - lo)
+  }
+  return [0.16, 0.34, 0.52, 0.7, 0.86].map(cuantil)
 }
+
+const pieces = computed(() => {
+  const valores = props.paisesResumen.map((p) => p.importe_total_eur).filter((v) => v > 0)
+  const cortes = calcularCortes(valores)
+  const limites = [0, ...cortes, Infinity]
+  return RAMP.map((color, i) => ({ min: limites[i], max: limites[i + 1], color }))
+})
 
 const option = computed(() => ({
   tooltip: {
     trigger: 'item' as const,
-    formatter: (params: { name: string; data?: { nombre?: string; importeReal: number; n: number } }) => {
+    formatter: (params: { name: string; data?: { nombre?: string; value: number; n: number } }) => {
       const nombre = params.data?.nombre ?? params.name
       if (!params.data) {
         return `${nombre}<br/>Sin datos`
       }
-      return `${nombre}<br/>${formatEUR(params.data.importeReal)}<br/>${params.data.n} proyecto(s)`
+      return `${nombre}<br/>${formatEUR(params.data.value)}<br/>${params.data.n} proyecto(s)`
     },
   },
   visualMap: {
-    type: 'continuous' as const,
-    min: 0,
-    max: maxLog.value,
-    calculable: false,
+    type: 'piecewise' as const,
     show: false,
-    inRange: { color: ['#dbeafe', '#1e3a8a'] },
+    pieces: pieces.value,
   },
   series: [
     {
@@ -85,8 +104,8 @@ const option = computed(() => ({
       map: 'world',
       roam: true,
       nameProperty: 'name',
-      itemStyle: { areaColor: '#d1d5db', borderColor: '#9ca3af' },
-      emphasis: { itemStyle: { areaColor: '#93c5fd' } },
+      itemStyle: { areaColor: '#E6E1D7', borderColor: '#FAF7F0', borderWidth: 0.5 },
+      emphasis: { itemStyle: { areaColor: '#C9791C' } },
       data: seriesData.value,
     },
   ],
@@ -98,13 +117,47 @@ function onClick(params: { name: string }) {
 </script>
 
 <template>
-  <v-chart v-if="mapaListo" class="world-map" :option="option" autoresize @click="onClick" />
+  <div class="world-map-wrap">
+    <v-chart v-if="mapaListo" class="world-map" :option="option" autoresize @click="onClick" />
+    <div class="legend">
+      <span class="lg-label">Menos</span>
+      <span v-for="color in RAMP" :key="color" class="lg-sw" :style="{ background: color }"></span>
+      <span class="lg-label">Más</span>
+      <span class="lg-sw lg-none"></span>
+      <span class="lg-label">Sin datos</span>
+    </div>
+  </div>
 </template>
 
 <style scoped>
+.world-map-wrap {
+  width: 100%;
+}
 .world-map {
   width: 100%;
   height: 100%;
   min-height: 500px;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.lg-sw {
+  width: 26px;
+  height: 9px;
+  display: inline-block;
+}
+.lg-none {
+  background: #e6e1d7;
+}
+.lg-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 0 8px 0 4px;
 }
 </style>

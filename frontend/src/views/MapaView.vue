@@ -1,43 +1,58 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
 import WorldMap from '../components/WorldMap.vue'
-import CountryPanel from '../components/CountryPanel.vue'
 import FilterBar from '../components/FilterBar.vue'
+import CountryTable from '../components/CountryTable.vue'
+import { formatEURCompacto } from '../utils/formato'
 
 const store = useGastoStore()
+const router = useRouter()
 
 onMounted(() => {
   void Promise.all([store.cargarFiltros(), store.cargarResumen()])
 })
 
 function onCountryClick(iso3: string) {
-  store.seleccionarPais(iso3)
+  router.push(`/paises/${iso3}`)
 }
 </script>
 
 <template>
-  <div class="mapa-view">
-    <p v-if="store.error" class="error">{{ store.error }}</p>
+  <section class="page-head">
+    <p class="kicker">Mapa</p>
+    <h1 class="h-page">El reparto, país a país</h1>
     <FilterBar />
-    <WorldMap class="mapa" :paises-resumen="store.paisesResumen" @country-click="onCountryClick" />
-    <CountryPanel />
+  </section>
+
+  <p v-if="store.error" class="error">{{ store.error }}</p>
+
+  <div class="map-wrap">
+    <WorldMap class="mapa-grande" :paises-resumen="store.paisesResumen" @country-click="onCountryClick" />
   </div>
+
+  <section class="block">
+    <h2 class="sec-title">
+      {{ store.paisesResumen.length }} países ·
+      {{ formatEURCompacto(store.paisesResumen.reduce((acc, p) => acc + p.importe_total_eur, 0)) }}
+    </h2>
+    <CountryTable :paises="store.paisesResumen" />
+  </section>
 </template>
 
 <style scoped>
-.mapa-view {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
-.mapa {
-  flex: 1;
-}
 .error {
-  margin: 0;
+  margin: 14px 0 0;
   padding: 0.5rem 1rem;
   background: #fee2e2;
   color: #b91c1c;
+}
+.map-wrap {
+  margin-top: 26px;
+  position: relative;
+}
+.mapa-grande {
+  min-height: 560px;
 }
 </style>
