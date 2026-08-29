@@ -28,6 +28,8 @@ export interface Proyecto {
   start_date: string | null
   end_date: string | null
   url_fuente: string | null
+  url_bdns: string | null
+  bdns_tipo_convocatoria: string | null
 }
 
 export interface ProyectoBusqueda extends Proyecto {
