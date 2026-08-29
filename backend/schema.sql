@@ -43,6 +43,8 @@ create table if not exists fact_gasto (
     importe_pais_eur    numeric(14,2),
     tipo_transaccion    text,                           -- disbursement | commitment | null
     url_fuente          text,                           -- enlace directo a la ficha oficial (AECID, BDNS...)
+    url_bdns            text,                           -- enlace a la convocatoria BDNS (subvenciones), si existe
+    bdns_tipo_convocatoria text,                         -- tipo de convocatoria BDNS, verbatim de su API (ej. "Concurrencia competitiva - canonica")
     fecha_ingesta       timestamptz default now(),
     unique (aid, pais_id)                               -- evita duplicados si se re-ejecuta la carga
 );
@@ -50,3 +52,7 @@ create table if not exists fact_gasto (
 create index if not exists idx_fact_gasto_pais on fact_gasto(pais_id);
 create index if not exists idx_fact_gasto_categoria on fact_gasto(categoria_id);
 create index if not exists idx_fact_gasto_anio on fact_gasto(start_date);
+
+-- Migracion idempotente para bases ya creadas antes de anadir url_bdns/bdns_tipo_convocatoria.
+alter table fact_gasto add column if not exists url_bdns text;
+alter table fact_gasto add column if not exists bdns_tipo_convocatoria text;

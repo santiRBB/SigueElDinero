@@ -159,6 +159,8 @@ def cargar():
                 fila.get("importe_pais_eur"),
                 fila.get("tipo_transaccion_usado"),
                 fila.get("url_fuente"),
+                fila.get("url_bdns"),
+                fila.get("bdns_tipo_convocatoria"),
             ))
 
         psycopg2.extras.execute_values(
@@ -168,7 +170,8 @@ def cargar():
                 aid, pais_id, categoria_id, organismo_id, titulo, descripcion,
                 reporting_org, fuente, reporting_ref, activity_status,
                 start_date, end_date, importe_total_eur, porcentaje_pais,
-                porcentaje_fuente, importe_pais_eur, tipo_transaccion, url_fuente
+                porcentaje_fuente, importe_pais_eur, tipo_transaccion, url_fuente,
+                url_bdns, bdns_tipo_convocatoria
             ) values %s
             on conflict (aid, pais_id) do update set
                 titulo = excluded.titulo,
@@ -179,6 +182,8 @@ def cargar():
                 importe_pais_eur = excluded.importe_pais_eur,
                 tipo_transaccion = excluded.tipo_transaccion,
                 url_fuente = excluded.url_fuente,
+                url_bdns = excluded.url_bdns,
+                bdns_tipo_convocatoria = excluded.bdns_tipo_convocatoria,
                 fecha_ingesta = now()
             """,
             registros,
