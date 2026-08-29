@@ -83,6 +83,8 @@ def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
         "aid": "AID-1", "titulo": "Proyecto X", "organismo_ejecutor": "ONG Y",
         "importe_pais_eur": 500.0, "porcentaje_pais": 100.0, "porcentaje_fuente": "declared",
         "start_date": "2024-01-01", "end_date": None, "url_fuente": "https://datos.aecid.es/w/ejemplo",
+        "url_bdns": "https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/867523",
+        "bdns_tipo_convocatoria": "Concesión directa - instrumental",
     }]
 
     class MultiQueryCursor(FakeCursor):
@@ -122,6 +124,9 @@ def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
         "nombre": "Respuesta de emergencia",
     }]
     assert result["proyectos"] == proyectos_rows
+    proy_sql, _ = cursor.executed[2]
+    assert "f.url_bdns" in proy_sql
+    assert "f.bdns_tipo_convocatoria" in proy_sql
     assert len(cursor.executed) == 3
     for _, params in cursor.executed[1:]:
         assert params[0] == "COL"
@@ -235,6 +240,7 @@ def test_buscar_proyectos_returns_total_and_resultados(monkeypatch):
         "pais_iso3": "COL", "pais_nombre": "Colombia", "codigo_grupo": "720",
         "importe_pais_eur": 500.0, "porcentaje_pais": 100.0, "porcentaje_fuente": "declared",
         "start_date": "2024-01-01", "end_date": None, "url_fuente": None,
+        "url_bdns": None, "bdns_tipo_convocatoria": None,
     }]
 
     class MultiQueryCursor(FakeCursor):
@@ -267,6 +273,7 @@ def test_buscar_proyectos_returns_total_and_resultados(monkeypatch):
         "pais_iso3": "COL", "pais_nombre": "Colombia", "codigo_grupo": "720",
         "importe_pais_eur": 500.0, "porcentaje_pais": 100.0, "porcentaje_fuente": "declared",
         "start_date": "2024-01-01", "end_date": None, "url_fuente": None,
+        "url_bdns": None, "bdns_tipo_convocatoria": None,
         "grupo_nombre": "Respuesta de emergencia",
     }]
     count_sql, count_params = cursor.executed[0]
@@ -275,6 +282,8 @@ def test_buscar_proyectos_returns_total_and_resultados(monkeypatch):
     results_sql, results_params = cursor.executed[1]
     assert "limit %s offset %s" in results_sql
     assert results_params[-2:] == [10, 10]
+    assert "f.url_bdns" in results_sql
+    assert "f.bdns_tipo_convocatoria" in results_sql
 
 
 def test_buscar_proyectos_without_query_text(monkeypatch):

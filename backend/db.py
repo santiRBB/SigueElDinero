@@ -93,7 +93,7 @@ def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
             proy_sql = """
                 select f.aid, f.titulo, o.nombre as organismo_ejecutor,
                        f.importe_pais_eur, f.porcentaje_pais, f.porcentaje_fuente,
-                       f.start_date, f.end_date, f.url_fuente
+                       f.start_date, f.end_date, f.url_fuente, f.url_bdns, f.bdns_tipo_convocatoria
                 from fact_gasto f
                 join dim_pais p on p.pais_id = f.pais_id
                 left join dim_organismo o on o.organismo_id = f.organismo_id
@@ -280,7 +280,7 @@ def buscar_proyectos(
                        p.iso_alpha3 as pais_iso3, p.nombre as pais_nombre,
                        substring(c.codigo_crs from 1 for 3) as codigo_grupo,
                        f.importe_pais_eur, f.porcentaje_pais, f.porcentaje_fuente,
-                       f.start_date, f.end_date, f.url_fuente
+                       f.start_date, f.end_date, f.url_fuente, f.url_bdns, f.bdns_tipo_convocatoria
                 {base_sql}
                 order by {ORDENES_BUSQUEDA.get(orden, ORDENES_BUSQUEDA[ORDEN_BUSQUEDA_DEFECTO])}
                 limit %s offset %s
