@@ -114,8 +114,12 @@ BDNS_LINK_RE = re.compile(
 BDNS_API_URL = "https://www.pap.hacienda.gob.es/bdnstrans/api/convocatorias"
 
 
-def get_bdns_info(url_fuente):
+def get_bdns_info(url_fuente, client=httpx):
     """(url_bdns, tipo_convocatoria) a partir de la ficha AECID de una actividad.
+
+    `client` es cualquier objeto con un metodo `.get(url, **kwargs)` compatible con
+    httpx -- por defecto el propio modulo httpx, o una instancia de httpx.Client
+    (pasada desde main()) para reutilizar la conexion TCP/TLS entre actividades.
 
     Devuelve (None, None) si no hay ficha, si la ficha no enlaza a BDNS, o si cualquier
     peticion de red falla -- nunca lanza, para no interrumpir la ingesta por una actividad.
@@ -123,14 +127,14 @@ def get_bdns_info(url_fuente):
     if not url_fuente:
         return None, None
     try:
-        pagina = httpx.get(url_fuente, timeout=10, follow_redirects=True)
+        pagina = client.get(url_fuente, timeout=10, follow_redirects=True)
         pagina.raise_for_status()
         match = BDNS_LINK_RE.search(pagina.text)
         if not match:
             return None, None
         vpd, num_conv = match.group(1), match.group(2)
         url_bdns = match.group(0)
-        api_resp = httpx.get(BDNS_API_URL, params={"vpd": vpd, "numConv": num_conv}, timeout=10)
+        api_resp = client.get(BDNS_API_URL, params={"vpd": vpd, "numConv": num_conv}, timeout=10)
         api_resp.raise_for_status()
         tipo_convocatoria = api_resp.json().get("tipoConvocatoria")
         return url_bdns, tipo_convocatoria
@@ -147,7 +151,8 @@ def main():
     n_sin_pais = 0
 
     with open(FACT_GASTO_PATH, "w", encoding="utf-8") as f_fact, \
-         open(SIN_PAIS_PATH, "w", encoding="utf-8") as f_sin_pais:
+         open(SIN_PAIS_PATH, "w", encoding="utf-8") as f_sin_pais, \
+         httpx.Client() as bdns_client:
 
         for reporting_ref in REPORTING_REFS:
             log.info("Consultando actividades de reporting_ref=%s", reporting_ref)
@@ -171,7 +176,7 @@ def main():
                 total_eur, otras_monedas, tx_type_used = get_amount_eur(activity)
 
                 url_fuente = build_source_url(aid, reporting_ref)
-                url_bdns, bdns_tipo_convocatoria = get_bdns_info(url_fuente)
+                url_bdns, bdns_tipo_convocatoria = get_bdns_info(url_fuente, bdns_client)
                 if url_fuente:
                     time.sleep(0.2)
 
