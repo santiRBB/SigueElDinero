@@ -22,9 +22,11 @@ defineProps<{
       <span class="p-tags">
         <router-link v-if="paisIso3" class="tag" :to="`/paises/${paisIso3}`">{{ paisNombre }}</router-link>
         <a v-if="proyecto.url_fuente" class="tag" :href="proyecto.url_fuente" target="_blank" rel="noopener">Ver proyecto original ↗</a>
+        <a v-if="proyecto.url_bdns" class="tag" :href="proyecto.url_bdns" target="_blank" rel="noopener">Ver convocatoria BDNS ↗</a>
       </span>
       <AmountBadge :porcentaje-fuente="proyecto.porcentaje_fuente" />
       <p v-if="importeEstandar" class="nota-estandar">Importe estándar de esta convocatoria</p>
+      <span v-if="proyecto.bdns_tipo_convocatoria" class="p-bdns-tipo">{{ proyecto.bdns_tipo_convocatoria }}</span>
       <span class="p-dates">{{ formatFecha(proyecto.start_date) }} — {{ formatFecha(proyecto.end_date) }}</span>
     </div>
   </li>
@@ -93,6 +95,10 @@ a.tag:hover {
   color: var(--dim);
   font-style: italic;
   margin: 0;
+}
+.p-bdns-tipo {
+  font-size: 11.5px;
+  color: #8d9195;
 }
 .p-dates {
   font-size: 11.5px;
