@@ -29,9 +29,11 @@ Notas de diseno:
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
+import httpx
 from diterator import Iterator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -104,6 +106,37 @@ def build_source_url(aid, reporting_ref):
         return None
     slug = aid[len(prefijo):].lower()
     return f"https://datos.aecid.es/w/{slug}"
+
+
+BDNS_LINK_RE = re.compile(
+    r"https://www\.pap\.hacienda\.gob\.es/bdnstrans/([A-Z]{2})/[a-z]{2}/convocatorias/(\d+)"
+)
+BDNS_API_URL = "https://www.pap.hacienda.gob.es/bdnstrans/api/convocatorias"
+
+
+def get_bdns_info(url_fuente):
+    """(url_bdns, tipo_convocatoria) a partir de la ficha AECID de una actividad.
+
+    Devuelve (None, None) si no hay ficha, si la ficha no enlaza a BDNS, o si cualquier
+    peticion de red falla -- nunca lanza, para no interrumpir la ingesta por una actividad.
+    """
+    if not url_fuente:
+        return None, None
+    try:
+        pagina = httpx.get(url_fuente, timeout=10, follow_redirects=True)
+        pagina.raise_for_status()
+        match = BDNS_LINK_RE.search(pagina.text)
+        if not match:
+            return None, None
+        vpd, num_conv = match.group(1), match.group(2)
+        url_bdns = match.group(0)
+        api_resp = httpx.get(BDNS_API_URL, params={"vpd": vpd, "numConv": num_conv}, timeout=10)
+        api_resp.raise_for_status()
+        tipo_convocatoria = api_resp.json().get("tipoConvocatoria")
+        return url_bdns, tipo_convocatoria
+    except Exception as e:
+        log.warning("No se pudo obtener info BDNS de %s: %s", url_fuente, e)
+        return None, None
 
 
 def main():
