@@ -1,3 +1,12 @@
 declare module 'topojson-client' {
-  export function feature(topology: unknown, object: unknown): { features: Array<{ id?: string | number; properties: Record<string, unknown> }> }
+  export function feature(
+    topology: unknown,
+    object: unknown
+  ): {
+    features: Array<{
+      id?: string | number
+      properties: Record<string, unknown>
+      geometry: { type: string; coordinates: unknown }
+    }>
+  }
 }

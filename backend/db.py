@@ -229,6 +229,15 @@ def pais_por_anio(iso_alpha3: str, grupo: str | None = None) -> list[dict] | Non
         conn.close()
 
 
+ORDENES_BUSQUEDA = {
+    "importe_desc": "f.importe_pais_eur desc",
+    "importe_asc": "f.importe_pais_eur asc",
+    "fecha_desc": "f.start_date desc nulls last",
+    "fecha_asc": "f.start_date asc nulls last",
+}
+ORDEN_BUSQUEDA_DEFECTO = "importe_desc"
+
+
 def buscar_proyectos(
     q: str | None = None,
     anio: int | None = None,
@@ -236,6 +245,7 @@ def buscar_proyectos(
     pais: str | None = None,
     pagina: int = 1,
     por_pagina: int = 30,
+    orden: str | None = None,
 ) -> dict:
     base_sql = """
         from fact_gasto f
@@ -272,7 +282,7 @@ def buscar_proyectos(
                        f.importe_pais_eur, f.porcentaje_pais, f.porcentaje_fuente,
                        f.start_date, f.end_date, f.url_fuente
                 {base_sql}
-                order by f.importe_pais_eur desc
+                order by {ORDENES_BUSQUEDA.get(orden, ORDENES_BUSQUEDA[ORDEN_BUSQUEDA_DEFECTO])}
                 limit %s offset %s
             """
             offset = max(pagina - 1, 0) * por_pagina

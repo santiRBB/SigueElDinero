@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
-import { detectarImportesEstandar } from '../utils/proyectos'
+import type { Orden } from '../services/api'
+import { detectarImportesEstandar, ordenarProyectos } from '../utils/proyectos'
 import ProjectCard from '../components/ProjectCard.vue'
 import YearBars from '../components/YearBars.vue'
 import StatTile from '../components/StatTile.vue'
 import BarList from '../components/BarList.vue'
 import FilterBar from '../components/FilterBar.vue'
+import SortSelect from '../components/SortSelect.vue'
 import { formatEURCompacto, formatPorcentaje } from '../utils/formato'
 
 const route = useRoute()
@@ -33,6 +35,10 @@ watch(() => store.filtroGrupo, () => void store.cargarPaisPorAnio(iso3.value))
 
 const importesEstandar = computed(() =>
   store.detallePais ? detectarImportesEstandar(store.detallePais.proyectos) : new Set<string>()
+)
+const ordenProyectos = ref<Orden>('importe_desc')
+const proyectosOrdenados = computed(() =>
+  store.detallePais ? ordenarProyectos(store.detallePais.proyectos, ordenProyectos.value) : []
 )
 const totalPais = computed(() => store.detallePais?.categorias.reduce((acc, c) => acc + c.importe_eur, 0) ?? 0)
 const totalGlobal = computed(() => store.paisesResumen.reduce((acc, p) => acc + p.importe_total_eur, 0))
@@ -82,11 +88,14 @@ function onSelectYear(anio: number) {
     </section>
 
     <section class="block">
-      <h2 class="sec-title">Proyectos ({{ store.detallePais.proyectos.length }})</h2>
+      <div class="block-head">
+        <h2 class="sec-title">Proyectos ({{ store.detallePais.proyectos.length }})</h2>
+        <SortSelect v-if="store.detallePais.proyectos.length" v-model="ordenProyectos" />
+      </div>
       <p v-if="!store.detallePais.proyectos.length" class="note">Ningún proyecto coincide con estos filtros.</p>
       <ul v-else class="plist">
         <ProjectCard
-          v-for="proyecto in store.detallePais.proyectos"
+          v-for="proyecto in proyectosOrdenados"
           :key="proyecto.aid"
           :proyecto="proyecto"
           :importe-estandar="importesEstandar.has(proyecto.aid)"

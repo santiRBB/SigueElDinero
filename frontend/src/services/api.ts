@@ -48,6 +48,8 @@ export interface Grupo {
   nombre: string
 }
 
+export type Orden = 'importe_desc' | 'importe_asc' | 'fecha_desc' | 'fecha_asc'
+
 export interface ResultadoBusqueda {
   total: number
   pagina: number
@@ -67,7 +69,9 @@ async function getJSON<T>(path: string, params: Record<string, string | number |
 
   const response = await fetch(url.toString())
   if (!response.ok) {
-    throw new Error(`Error ${response.status} al llamar a ${path}`)
+    const error = new Error(`Error ${response.status} al llamar a ${path}`) as Error & { status: number }
+    error.status = response.status
+    throw error
   }
   return response.json() as Promise<T>
 }
@@ -107,6 +111,7 @@ export function buscarProyectos(params: {
   pais?: string
   pagina?: number
   por_pagina?: number
+  orden?: Orden
 }): Promise<ResultadoBusqueda> {
   return getJSON<ResultadoBusqueda>('/api/proyectos/buscar', params)
 }

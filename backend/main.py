@@ -76,5 +76,6 @@ def get_buscar_proyectos(
     pais: str | None = None,
     pagina: int = 1,
     por_pagina: int = 30,
+    orden: str | None = None,
 ):
-    return buscar_proyectos(q=q, anio=anio, grupo=grupo, pais=pais, pagina=pagina, por_pagina=por_pagina)
+    return buscar_proyectos(q=q, anio=anio, grupo=grupo, pais=pais, pagina=pagina, por_pagina=por_pagina, orden=orden)

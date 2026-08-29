@@ -67,6 +67,12 @@ describe('api service', () => {
     await expect(getDetallePais('ZZZ')).rejects.toThrow('404')
   })
 
+  it('attaches the HTTP status code to the thrown error', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: false, status: 404 } as Response)
+
+    await expect(getDetallePais('ZZZ')).rejects.toMatchObject({ status: 404 })
+  })
+
   it('getAnios and getSectores call the filtros endpoints', async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => [] } as Response)
 

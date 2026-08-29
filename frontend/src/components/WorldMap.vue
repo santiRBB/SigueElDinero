@@ -25,6 +25,51 @@ const emit = defineEmits<{
 
 const mapaListo = ref(false)
 
+type Anillo = [number, number][]
+
+// world-atlas deja los anillos de países que cruzan el antimeridiano (Rusia,
+// Fiyi) tocando exactamente -180/180 pero sin partirlos, pensados para una
+// proyección que envuelve el globo. echarts dibuja lon/lat linealmente sin
+// envolver, así que ese tramo se pinta como una línea recta que cruza todo
+// el mapa. Se parte el anillo en ese punto para evitarlo.
+function partirEnAntimeridiano(anillo: Anillo): Anillo[] {
+  const partes: Anillo[] = []
+  let actual: Anillo = [anillo[0]]
+  for (let i = 1; i < anillo.length; i++) {
+    if (Math.abs(anillo[i][0] - anillo[i - 1][0]) > 180) {
+      partes.push(actual)
+      actual = []
+    }
+    actual.push(anillo[i])
+  }
+  partes.push(actual)
+  return partes
+}
+
+function repararAntimeridiano<T extends { type: string; coordinates: unknown }>(geometry: T): T {
+  const poligonos: Anillo[][] =
+    geometry.type === 'Polygon'
+      ? [geometry.coordinates as Anillo[]]
+      : geometry.type === 'MultiPolygon'
+        ? (geometry.coordinates as Anillo[][])
+        : []
+  if (poligonos.length === 0) return geometry
+
+  const anillos = poligonos.flat()
+  const necesitaReparo = anillos.some((anillo) => partirEnAntimeridiano(anillo).length > 1)
+  if (!necesitaReparo) return geometry
+
+  return {
+    ...geometry,
+    type: 'MultiPolygon',
+    coordinates: anillos.flatMap((anillo) =>
+      partirEnAntimeridiano(anillo)
+        .filter((parte) => parte.length >= 4)
+        .map((parte) => [parte])
+    ),
+  }
+}
+
 onMounted(() => {
   const topoObjects = (worldTopo as { objects: { countries: unknown } }).objects.countries
   const geoJson = feature(worldTopo, topoObjects)
@@ -36,6 +81,7 @@ onMounted(() => {
     if (alpha3) {
       f.properties = { ...f.properties, name: alpha3 }
     }
+    f.geometry = repararAntimeridiano(f.geometry)
   }
 
   echarts.registerMap('world', geoJson as unknown as Parameters<typeof echarts.registerMap>[1])
@@ -85,9 +131,9 @@ const pieces = computed(() => {
 const option = computed(() => ({
   tooltip: {
     trigger: 'item' as const,
-    formatter: (params: { name: string; data?: { nombre?: string; value: number; n: number } }) => {
+    formatter: (params: { name: string; data?: { nombre?: string; value?: number; n?: number } }) => {
       const nombre = params.data?.nombre ?? params.name
-      if (!params.data) {
+      if (params.data?.value == null) {
         return `${nombre}<br/>Sin datos`
       }
       return `${nombre}<br/>${formatEUR(params.data.value)}<br/>${params.data.n} proyecto(s)`
@@ -135,8 +181,7 @@ function onClick(params: { name: string }) {
 }
 .world-map {
   width: 100%;
-  height: 100%;
-  min-height: 500px;
+  height: 500px;
 }
 .legend {
   display: flex;

@@ -77,14 +77,26 @@ describe('gastoStore', () => {
     expect(store.detalleError).toBeNull()
   })
 
-  it('seleccionarPais catches a failed detail fetch into detalleError', async () => {
-    vi.mocked(api.getDetallePais).mockRejectedValue(new Error('Error 404 al llamar a /api/paises/XYZ/detalle'))
+  it('seleccionarPais shows a friendly message when the country has no data (404)', async () => {
+    const notFound = Object.assign(new Error('Error 404 al llamar a /api/paises/XYZ/detalle'), { status: 404 })
+    vi.mocked(api.getDetallePais).mockRejectedValue(notFound)
 
     const store = useGastoStore()
     await store.seleccionarPais('XYZ')
 
     expect(store.detallePais).toBeNull()
-    expect(store.detalleError).toBe('Error 404 al llamar a /api/paises/XYZ/detalle')
+    expect(store.detalleError).toBe('Este país no tiene proyectos registrados.')
+  })
+
+  it('seleccionarPais keeps the raw error message for non-404 failures', async () => {
+    const serverError = Object.assign(new Error('Error 500 al llamar a /api/paises/XYZ/detalle'), { status: 500 })
+    vi.mocked(api.getDetallePais).mockRejectedValue(serverError)
+
+    const store = useGastoStore()
+    await store.seleccionarPais('XYZ')
+
+    expect(store.detallePais).toBeNull()
+    expect(store.detalleError).toBe('Error 500 al llamar a /api/paises/XYZ/detalle')
   })
 
   it('seleccionarPais ignores a stale detalle response that resolves after a newer selection', async () => {
@@ -199,11 +211,22 @@ describe('gastoStore', () => {
     expect(store.cargandoBusqueda).toBe(true)
     await promise
 
-    expect(api.buscarProyectos).toHaveBeenCalledWith({ q: 'agua', anio: undefined, grupo: undefined, pagina: 1 })
+    expect(api.buscarProyectos).toHaveBeenCalledWith({ q: 'agua', anio: undefined, grupo: undefined, pagina: 1, orden: 'importe_desc' })
     expect(store.resultadosBusqueda).toEqual(mockResultado.resultados)
     expect(store.totalBusqueda).toBe(1)
     expect(store.cargandoBusqueda).toBe(false)
     expect(store.errorBusqueda).toBeNull()
+  })
+
+  it('buscarProyectos passes the selected ordenBusqueda to the API', async () => {
+    const mockResultado = { total: 0, pagina: 1, por_pagina: 30, resultados: [] }
+    vi.mocked(api.buscarProyectos).mockResolvedValue(mockResultado as never)
+
+    const store = useGastoStore()
+    store.ordenBusqueda = 'fecha_asc'
+    await store.buscarProyectos()
+
+    expect(api.buscarProyectos).toHaveBeenCalledWith(expect.objectContaining({ orden: 'fecha_asc' }))
   })
 
   it('buscarProyectos records the error message when the API call fails', async () => {

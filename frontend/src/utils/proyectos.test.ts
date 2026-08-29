@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Proyecto } from '../services/api'
-import { detectarImportesEstandar } from './proyectos'
+import { detectarImportesEstandar, ordenarProyectos } from './proyectos'
 
 function proyecto(overrides: Partial<Proyecto>): Proyecto {
   return {
@@ -39,5 +39,35 @@ describe('detectarImportesEstandar', () => {
 
   it('returns an empty set for an empty list', () => {
     expect(detectarImportesEstandar([])).toEqual(new Set())
+  })
+})
+
+describe('ordenarProyectos', () => {
+  const proyectos = [
+    proyecto({ aid: 'A', importe_pais_eur: 200, start_date: '2023-05-01' }),
+    proyecto({ aid: 'B', importe_pais_eur: 500, start_date: '2024-01-01' }),
+    proyecto({ aid: 'C', importe_pais_eur: 100, start_date: null }),
+  ]
+
+  it('sorts by importe descending by default', () => {
+    expect(ordenarProyectos(proyectos, 'importe_desc').map((p) => p.aid)).toEqual(['B', 'A', 'C'])
+  })
+
+  it('sorts by importe ascending', () => {
+    expect(ordenarProyectos(proyectos, 'importe_asc').map((p) => p.aid)).toEqual(['C', 'A', 'B'])
+  })
+
+  it('sorts by fecha descending, with null dates last', () => {
+    expect(ordenarProyectos(proyectos, 'fecha_desc').map((p) => p.aid)).toEqual(['B', 'A', 'C'])
+  })
+
+  it('sorts by fecha ascending, with null dates last', () => {
+    expect(ordenarProyectos(proyectos, 'fecha_asc').map((p) => p.aid)).toEqual(['A', 'B', 'C'])
+  })
+
+  it('does not mutate the original array', () => {
+    const copia = [...proyectos]
+    ordenarProyectos(proyectos, 'importe_asc')
+    expect(proyectos).toEqual(copia)
   })
 })

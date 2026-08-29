@@ -29,6 +29,12 @@ describe('formatPorcentaje', () => {
   it('formats with one decimal and a percent sign', () => {
     expect(formatPorcentaje(42.567)).toBe('42,6 %')
   })
+  it('shows a "less than" marker for a tiny nonzero share instead of "0,0 %"', () => {
+    expect(formatPorcentaje(0.03)).toBe('< 0,1 %')
+  })
+  it('still shows "0,0 %" for an actual zero', () => {
+    expect(formatPorcentaje(0)).toBe('0,0 %')
+  })
 })
 
 describe('formatFecha', () => {

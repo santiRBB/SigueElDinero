@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useGastoStore } from '../stores/gastoStore'
 import FilterBar from '../components/FilterBar.vue'
 import ProjectCard from '../components/ProjectCard.vue'
+import SortSelect from '../components/SortSelect.vue'
 import { formatEURCompacto } from '../utils/formato'
 
 const store = useGastoStore()
@@ -22,7 +23,7 @@ function irAPagina(pagina: number) {
 }
 
 watch(
-  () => [store.filtroAnio, store.filtroGrupo],
+  () => [store.filtroAnio, store.filtroGrupo, store.ordenBusqueda],
   () => { void store.buscarProyectos() },
 )
 
@@ -43,6 +44,7 @@ const totalPaginaActual = computed(() => store.resultadosBusqueda.reduce((acc, p
         @input="onInput"
       />
       <FilterBar />
+      <SortSelect v-model="store.ordenBusqueda" />
     </div>
     <p class="note">
       {{ store.totalBusqueda }} proyectos

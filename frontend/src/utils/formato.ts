@@ -13,6 +13,7 @@ export function formatEURCompacto(valor: number): string {
 }
 
 export function formatPorcentaje(valor: number): string {
+  if (valor > 0 && valor < 0.05) return '< 0,1 %'
   return nfUnDecimal.format(valor) + ' %'
 }
 

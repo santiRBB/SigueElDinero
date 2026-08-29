@@ -9,7 +9,7 @@ import {
   getResumenPorGrupo,
   getSectores,
 } from '../services/api'
-import type { AnioImporte, Grupo, GrupoImporte, PaisDetalle, PaisResumen, ProyectoBusqueda } from '../services/api'
+import type { AnioImporte, Grupo, GrupoImporte, Orden, PaisDetalle, PaisResumen, ProyectoBusqueda } from '../services/api'
 
 interface GastoState {
   paisesResumen: PaisResumen[]
@@ -28,6 +28,7 @@ interface GastoState {
   totalBusqueda: number
   queryBusqueda: string
   paginaBusqueda: number
+  ordenBusqueda: Orden
   cargandoBusqueda: boolean
   errorBusqueda: string | null
 }
@@ -62,6 +63,7 @@ export const useGastoStore = defineStore('gasto', {
     totalBusqueda: 0,
     queryBusqueda: '',
     paginaBusqueda: 1,
+    ordenBusqueda: 'importe_desc',
     cargandoBusqueda: false,
     errorBusqueda: null,
   }),
@@ -127,7 +129,9 @@ export const useGastoStore = defineStore('gasto', {
         this.detallePais = data
       } catch (e) {
         if (token !== detalleRequestToken) return
-        this.detalleError = (e as Error).message
+        const status = (e as { status?: number }).status
+        this.detalleError =
+          status === 404 ? 'Este país no tiene proyectos registrados.' : (e as Error).message
       }
     },
     async cargarPaisPorAnio(iso3: string) {
@@ -159,6 +163,7 @@ export const useGastoStore = defineStore('gasto', {
           anio: this.filtroAnio ?? undefined,
           grupo: this.filtroGrupo ?? undefined,
           pagina,
+          orden: this.ordenBusqueda,
         })
         if (token !== busquedaRequestToken) return
         this.resultadosBusqueda = data.resultados

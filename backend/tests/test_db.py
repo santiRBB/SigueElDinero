@@ -1,3 +1,5 @@
+import pytest
+
 import db
 
 
@@ -117,7 +119,7 @@ def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
     assert result["pais"] == pais_row
     assert result["categorias"] == [{
         "codigo_grupo": "720", "importe_eur": 500.0, "n_intervenciones": 1,
-        "nombre": "Emergency Response",
+        "nombre": "Respuesta de emergencia",
     }]
     assert result["proyectos"] == proyectos_rows
     assert len(cursor.executed) == 3
@@ -142,8 +144,8 @@ def test_sectores_disponibles(monkeypatch):
     result = db.sectores_disponibles()
 
     assert result == [
-        {"codigo_grupo": "140", "nombre": "Water Supply & Sanitation"},
-        {"codigo_grupo": "720", "nombre": "Emergency Response"},
+        {"codigo_grupo": "140", "nombre": "Abastecimiento de agua y saneamiento"},
+        {"codigo_grupo": "720", "nombre": "Respuesta de emergencia"},
     ]
 
 
@@ -181,7 +183,7 @@ def test_resumen_por_grupo_annotates_nombre(monkeypatch):
 
     result = db.resumen_por_grupo(anio=2024)
 
-    assert result == [{"codigo_grupo": "720", "importe_eur": 500.0, "n_intervenciones": 1, "nombre": "Emergency Response"}]
+    assert result == [{"codigo_grupo": "720", "importe_eur": 500.0, "n_intervenciones": 1, "nombre": "Respuesta de emergencia"}]
     sql, params = cursor.executed[0]
     assert params == [2024]
     assert "extract(year from f.start_date) = %s" in sql
@@ -265,7 +267,7 @@ def test_buscar_proyectos_returns_total_and_resultados(monkeypatch):
         "pais_iso3": "COL", "pais_nombre": "Colombia", "codigo_grupo": "720",
         "importe_pais_eur": 500.0, "porcentaje_pais": 100.0, "porcentaje_fuente": "declared",
         "start_date": "2024-01-01", "end_date": None, "url_fuente": None,
-        "grupo_nombre": "Emergency Response",
+        "grupo_nombre": "Respuesta de emergencia",
     }]
     count_sql, count_params = cursor.executed[0]
     assert "ilike" in count_sql
@@ -300,3 +302,63 @@ def test_buscar_proyectos_without_query_text(monkeypatch):
     count_sql, count_params = cursor.executed[0]
     assert "ilike" not in count_sql
     assert count_params == []
+
+
+class _EmptyResultCursor(FakeCursor):
+    """Answers the count query with 0, then the results query with []."""
+
+    def __init__(self):
+        super().__init__(rows=[])
+        self._responses = [[{"total": 0}], []]
+        self._call = 0
+
+    def fetchone(self):
+        row = self._responses[self._call][0] if self._responses[self._call] else None
+        self._call += 1
+        return row
+
+    def fetchall(self):
+        rows = self._responses[self._call]
+        self._call += 1
+        return rows
+
+
+def test_buscar_proyectos_orders_by_importe_desc_by_default(monkeypatch):
+    cursor = _EmptyResultCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.buscar_proyectos()
+
+    results_sql, _ = cursor.executed[1]
+    assert "order by f.importe_pais_eur desc" in results_sql
+
+
+@pytest.mark.parametrize(
+    "orden,esperado",
+    [
+        ("importe_asc", "order by f.importe_pais_eur asc"),
+        ("fecha_desc", "order by f.start_date desc nulls last"),
+        ("fecha_asc", "order by f.start_date asc nulls last"),
+    ],
+)
+def test_buscar_proyectos_applies_whitelisted_orden(monkeypatch, orden, esperado):
+    cursor = _EmptyResultCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.buscar_proyectos(orden=orden)
+
+    results_sql, _ = cursor.executed[1]
+    assert esperado in results_sql
+
+
+def test_buscar_proyectos_falls_back_to_default_orden_for_unknown_value(monkeypatch):
+    cursor = _EmptyResultCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.buscar_proyectos(orden="'; drop table fact_gasto; --")
+
+    results_sql, _ = cursor.executed[1]
+    assert "order by f.importe_pais_eur desc" in results_sql

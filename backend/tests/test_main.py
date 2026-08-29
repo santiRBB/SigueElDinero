@@ -131,25 +131,28 @@ def test_resumen_por_grupo_endpoint(monkeypatch):
 def test_buscar_proyectos_endpoint_passes_params(monkeypatch):
     called_with = {}
 
-    def fake_buscar(q=None, anio=None, grupo=None, pais=None, pagina=1, por_pagina=30):
-        called_with.update({"q": q, "anio": anio, "grupo": grupo, "pais": pais, "pagina": pagina, "por_pagina": por_pagina})
+    def fake_buscar(q=None, anio=None, grupo=None, pais=None, pagina=1, por_pagina=30, orden=None):
+        called_with.update({"q": q, "anio": anio, "grupo": grupo, "pais": pais, "pagina": pagina, "por_pagina": por_pagina, "orden": orden})
         return {"total": 0, "pagina": pagina, "por_pagina": por_pagina, "resultados": []}
 
     monkeypatch.setattr(main, "buscar_proyectos", fake_buscar)
     client = TestClient(main.app)
 
-    resp = client.get("/api/proyectos/buscar", params={"q": "agua", "anio": 2024, "grupo": "720", "pais": "COL", "pagina": 2, "por_pagina": 10})
+    resp = client.get(
+        "/api/proyectos/buscar",
+        params={"q": "agua", "anio": 2024, "grupo": "720", "pais": "COL", "pagina": 2, "por_pagina": 10, "orden": "fecha_desc"},
+    )
 
     assert resp.status_code == 200
     assert resp.json() == {"total": 0, "pagina": 2, "por_pagina": 10, "resultados": []}
-    assert called_with == {"q": "agua", "anio": 2024, "grupo": "720", "pais": "COL", "pagina": 2, "por_pagina": 10}
+    assert called_with == {"q": "agua", "anio": 2024, "grupo": "720", "pais": "COL", "pagina": 2, "por_pagina": 10, "orden": "fecha_desc"}
 
 
 def test_buscar_proyectos_endpoint_defaults(monkeypatch):
     called_with = {}
 
-    def fake_buscar(q=None, anio=None, grupo=None, pais=None, pagina=1, por_pagina=30):
-        called_with.update({"q": q, "pagina": pagina, "por_pagina": por_pagina})
+    def fake_buscar(q=None, anio=None, grupo=None, pais=None, pagina=1, por_pagina=30, orden=None):
+        called_with.update({"q": q, "pagina": pagina, "por_pagina": por_pagina, "orden": orden})
         return {"total": 0, "pagina": pagina, "por_pagina": por_pagina, "resultados": []}
 
     monkeypatch.setattr(main, "buscar_proyectos", fake_buscar)
@@ -158,4 +161,4 @@ def test_buscar_proyectos_endpoint_defaults(monkeypatch):
     resp = client.get("/api/proyectos/buscar")
 
     assert resp.status_code == 200
-    assert called_with == {"q": None, "pagina": 1, "por_pagina": 30}
+    assert called_with == {"q": None, "pagina": 1, "por_pagina": 30, "orden": None}
