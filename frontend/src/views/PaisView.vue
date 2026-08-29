@@ -22,12 +22,14 @@ function cargarDetalle() {
 onMounted(() => {
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
+  if (!store.paisesResumen.length) void store.cargarResumen()
 })
 watch(iso3, () => {
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
 })
 watch(() => store.filtroAnio, cargarDetalle)
+watch(() => store.filtroGrupo, () => void store.cargarPaisPorAnio(iso3.value))
 
 const importesEstandar = computed(() =>
   store.detallePais ? detectarImportesEstandar(store.detallePais.proyectos) : new Set<string>()
