@@ -170,6 +170,11 @@ def main():
 
                 total_eur, otras_monedas, tx_type_used = get_amount_eur(activity)
 
+                url_fuente = build_source_url(aid, reporting_ref)
+                url_bdns, bdns_tipo_convocatoria = get_bdns_info(url_fuente)
+                if url_fuente:
+                    time.sleep(0.2)
+
                 paises = activity.recipient_countries
                 sectores = activity.sectors_by_vocabulary.get("1", [])  # 1 = OECD DAC CRS
                 sector_principal = sectores[0].code if sectores else None
@@ -206,7 +211,9 @@ def main():
                     "importe_total_eur": round(total_eur, 2),
                     "importe_otras_monedas": otras_monedas or None,
                     "tipo_transaccion_usado": tx_type_used,  # disbursement | commitment | None
-                    "url_fuente": build_source_url(aid, reporting_ref),
+                    "url_fuente": url_fuente,
+                    "url_bdns": url_bdns,
+                    "bdns_tipo_convocatoria": bdns_tipo_convocatoria,
                 }
 
                 if not paises:
