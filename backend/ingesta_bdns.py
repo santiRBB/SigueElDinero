@@ -29,6 +29,7 @@ import json
 import logging
 import time
 import unicodedata
+from collections import Counter
 from pathlib import Path
 
 import httpx
@@ -104,27 +105,31 @@ def _get_con_reintentos(client, url, params):
             time.sleep(espera)
 
 
-def procesar_mes(anio, mes, client):
+def procesar_mes(anio, mes, client, raw_writer):
     """Pagina /concesiones/busqueda para un mes completo, agrega por CCAA y devuelve
-    (totales_ccaa, sin_asignar, filas_raw) sin tocar disco -- quien llama decide que hacer
-    con el resultado (ver escribir_salidas)."""
+    (totales_ccaa, sin_asignar, num_paginas). Cada fila se escribe a medida que llega en
+    raw_writer (cualquier objeto con .write(str) -> None, p.ej. un gzip.open(...) en modo
+    texto) -- no acumula las filas crudas en memoria. Quien llama controla el ciclo de vida
+    del archivo (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite detectar
+    en los logs una respuesta prematuramente truncada por la API."""
     fecha_desde = f"01/{mes:02d}/{anio}"
     fecha_hasta = f"{ultimo_dia_mes(anio, mes):02d}/{mes:02d}/{anio}"
 
     totales_ccaa = {}
     sin_asignar = []
-    filas_raw = []
 
     page = 0
+    num_paginas = 0
     while True:
         resp = _get_con_reintentos(client, BUSQUEDA_URL, {
             "page": page, "pageSize": PAGE_SIZE,
             "fechaDesde": fecha_desde, "fechaHasta": fecha_hasta,
         })
         data = resp.json()
+        num_paginas += 1
 
         for fila in data["content"]:
-            filas_raw.append(fila)
+            raw_writer.write(json.dumps(fila, ensure_ascii=False) + "\n")
             codigo_ine = resolver_ccaa(fila)
             if codigo_ine is None:
                 sin_asignar.append(fila)
@@ -140,17 +145,12 @@ def procesar_mes(anio, mes, client):
         page += 1
         time.sleep(PAUSA_ENTRE_PAGINAS)
 
-    return totales_ccaa, sin_asignar, filas_raw
+    return totales_ccaa, sin_asignar, num_paginas
 
 
-def escribir_salidas(anio, mes, totales_ccaa, sin_asignar, filas_raw):
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
+def escribir_salidas(anio, mes, totales_ccaa, sin_asignar):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sufijo = f"{anio}-{mes:02d}"
-
-    with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", "wt", encoding="utf-8") as f:
-        for fila in filas_raw:
-            f.write(json.dumps(fila, ensure_ascii=False) + "\n")
 
     with open(OUTPUT_DIR / f"agregado_ccaa_{sufijo}.jsonl", "w", encoding="utf-8") as f:
         for codigo_ine, totales in totales_ccaa.items():
@@ -172,15 +172,28 @@ def main():
     anio, mes = (int(x) for x in args.mes.split("-"))
 
     log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    sufijo = f"{anio}-{mes:02d}"
     with httpx.Client(timeout=15) as client:
-        totales_ccaa, sin_asignar, filas_raw = procesar_mes(anio, mes, client)
-    escribir_salidas(anio, mes, totales_ccaa, sin_asignar, filas_raw)
+        with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", "wt", encoding="utf-8") as raw_writer:
+            totales_ccaa, sin_asignar, num_paginas = procesar_mes(anio, mes, client, raw_writer)
+    escribir_salidas(anio, mes, totales_ccaa, sin_asignar)
+
+    total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
 
     log.info(
         "Listo. Filas: %d | CCAA con datos: %d | Sin asignar: %d",
-        len(filas_raw), len(totales_ccaa), len(sin_asignar),
+        total_filas, len(totales_ccaa), len(sin_asignar),
     )
+    log.info("Paginas procesadas: %d", num_paginas)
+    log.info("Total de filas procesadas este mes: %d", total_filas)
     log.info("Salida en: %s", OUTPUT_DIR.resolve())
+
+    no_asignados_local = Counter(
+        normalizar(fila.get("nivel2")) for fila in sin_asignar if fila.get("nivel1") == "LOCAL"
+    )
+    for nombre, n in no_asignados_local.most_common(20):
+        log.info("Sin asignar (LOCAL): %s (%d)", nombre, n)
 
 
 if __name__ == "__main__":

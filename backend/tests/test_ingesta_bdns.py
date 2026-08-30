@@ -1,4 +1,4 @@
-import gzip
+import io
 import json
 
 import pytest
@@ -77,8 +77,9 @@ def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
         ], last=True),
     ]
     client = FakeClientPaginado(paginas)
+    raw_writer = io.StringIO()
 
-    totales, sin_asignar, filas_raw = ingesta_bdns.procesar_mes(2026, 8, client)
+    totales, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, client, raw_writer)
 
     assert totales == {
         "09": {"importe_total_eur": 150.0, "n_concesiones": 2},
@@ -86,7 +87,9 @@ def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
     }
     assert len(sin_asignar) == 1
     assert sin_asignar[0]["nivel1"] == "ESTATAL"
-    assert len(filas_raw) == 4
+    assert num_paginas == 2
+    filas_escritas = [json.loads(linea) for linea in raw_writer.getvalue().splitlines()]
+    assert len(filas_escritas) == 4
     assert client.llamadas[0][1]["fechaDesde"] == "01/08/2026"
     assert client.llamadas[0][1]["fechaHasta"] == "31/08/2026"
     assert client.llamadas[1][1]["page"] == 1
@@ -103,11 +106,13 @@ def test_procesar_mes_reintenta_ante_fallo_de_red(monkeypatch):
                 raise RuntimeError("network down")
             return FakeResponsePagina(content=[], last=True)
 
-    totales, sin_asignar, filas_raw = ingesta_bdns.procesar_mes(2026, 8, FlakyClient())
+    raw_writer = io.StringIO()
+    totales, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, FlakyClient(), raw_writer)
 
     assert intentos["n"] == 3
     assert totales == {}
-    assert filas_raw == []
+    assert raw_writer.getvalue() == ""
+    assert num_paginas == 1
 
 
 def test_procesar_mes_lanza_tras_agotar_reintentos(monkeypatch):
@@ -118,27 +123,16 @@ def test_procesar_mes_lanza_tras_agotar_reintentos(monkeypatch):
             raise RuntimeError("network down")
 
     with pytest.raises(RuntimeError):
-        ingesta_bdns.procesar_mes(2026, 8, SiempreFalla())
+        ingesta_bdns.procesar_mes(2026, 8, SiempreFalla(), io.StringIO())
 
 
-def test_escribir_salidas_crea_los_tres_archivos(tmp_path, monkeypatch):
+def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
-    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path / "raw")
 
     totales_ccaa = {"09": {"importe_total_eur": 150.0, "n_concesiones": 2}}
     sin_asignar = [{"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0}]
-    filas_raw = [
-        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 100.0},
-        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 50.0},
-        {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
-    ]
 
-    ingesta_bdns.escribir_salidas(2026, 8, totales_ccaa, sin_asignar, filas_raw)
-
-    raw_path = tmp_path / "raw" / "2026-08.jsonl.gz"
-    assert raw_path.exists()
-    with gzip.open(raw_path, "rt", encoding="utf-8") as f:
-        assert len(f.readlines()) == 3
+    ingesta_bdns.escribir_salidas(2026, 8, totales_ccaa, sin_asignar)
 
     agregado_path = tmp_path / "agregado_ccaa_2026-08.jsonl"
     with open(agregado_path, encoding="utf-8") as f:
