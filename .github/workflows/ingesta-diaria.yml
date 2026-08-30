@@ -46,3 +46,49 @@ jobs:
             backend/salida_aecid/fact_gasto.jsonl
             backend/salida_aecid/actividades_sin_pais.jsonl
           retention-days: 14
+
+  ingesta-bdns:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - name: Calcular mes actual y anterior (UTC)
+        id: meses
+        run: |
+          echo "actual=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+          echo "anterior=$(date -u -d 'last month' +%Y-%m)" >> "$GITHUB_OUTPUT"
+      - run: python ingesta_bdns.py --mes ${{ steps.meses.outputs.actual }}
+        working-directory: backend
+      - run: python ingesta_bdns.py --mes ${{ steps.meses.outputs.anterior }}
+        working-directory: backend
+      - run: python cargar_bdns.py
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Publicar detalle crudo en GitHub Release
+        working-directory: backend
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for mes in ${{ steps.meses.outputs.actual }} ${{ steps.meses.outputs.anterior }}; do
+            gh release view "bdns-$mes" >/dev/null 2>&1 || \
+              gh release create "bdns-$mes" --title "Concesiones BDNS $mes" \
+                --notes "Detalle crudo de concesiones BDNS del mes $mes"
+            gh release upload "bdns-$mes" "salida_bdns/raw/$mes.jsonl.gz" --clobber
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: salida-bdns-${{ github.run_id }}
+          path: |
+            backend/salida_bdns/sin_ccaa_asignada_*.jsonl
+          retention-days: 14
