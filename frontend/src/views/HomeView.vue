@@ -28,7 +28,11 @@ const grupoTop = computed(() => {
   const filas = [...store.resumenPorGrupo].sort((a, b) => b.importe_eur - a.importe_eur)
   return filas[0]?.nombre ?? filas[0]?.codigo_grupo ?? '—'
 })
-const etiquetaAnio = computed(() => (store.filtroAnio === null ? 'en el periodo disponible' : `en ${store.filtroAnio}`))
+const etiquetaAnio = computed(() => {
+  if (store.filtroAnio !== null) return `en ${store.filtroAnio}`
+  const primerAnio = store.aniosDisponibles[0]
+  return primerAnio ? `desde ${primerAnio}` : 'en el periodo disponible'
+})
 
 const filasPaises = computed(() =>
   [...store.paisesResumen]
