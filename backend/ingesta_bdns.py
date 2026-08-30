@@ -27,6 +27,8 @@ import calendar
 import gzip
 import json
 import logging
+import os
+import tempfile
 import time
 import unicodedata
 from collections import Counter
@@ -148,21 +150,47 @@ def procesar_mes(anio, mes, client, raw_writer):
     return totales_ccaa, sin_asignar, num_paginas
 
 
+def _escribir_atomico(ruta, lineas):
+    """Escribe `lineas` (un iterable de str, sin salto de linea) en `ruta` de forma atomica: primero
+    a un archivo temporal en el mismo directorio, y solo al terminar sin errores lo renombra al
+    nombre final con os.replace (atomico en POSIX y en Windows desde Python 3.3).
+
+    Evita que un backfill_bdns.py que revisa "existe agregado_ccaa_{mes}.jsonl?" para saltear un mes
+    ya procesado confunda un archivo truncado a medio escribir (proceso matado, corte de luz) con un
+    mes completo: bajo este esquema, el archivo con el nombre final solo aparece una vez que esta
+    integro.
+    """
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=ruta.parent, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            for linea in lineas:
+                f.write(linea + "\n")
+        os.replace(tmp_path, ruta)
+    except Exception:
+        os.unlink(tmp_path)
+        raise
+
+
 def escribir_salidas(anio, mes, totales_ccaa, sin_asignar):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sufijo = f"{anio}-{mes:02d}"
 
-    with open(OUTPUT_DIR / f"agregado_ccaa_{sufijo}.jsonl", "w", encoding="utf-8") as f:
-        for codigo_ine, totales in totales_ccaa.items():
-            f.write(json.dumps({
+    _escribir_atomico(
+        OUTPUT_DIR / f"agregado_ccaa_{sufijo}.jsonl",
+        (
+            json.dumps({
                 "codigo_ine": codigo_ine, "anio": anio, "mes": mes,
                 "importe_total_eur": round(totales["importe_total_eur"], 2),
                 "n_concesiones": totales["n_concesiones"],
-            }, ensure_ascii=False) + "\n")
+            }, ensure_ascii=False)
+            for codigo_ine, totales in totales_ccaa.items()
+        ),
+    )
 
-    with open(OUTPUT_DIR / f"sin_ccaa_asignada_{sufijo}.jsonl", "w", encoding="utf-8") as f:
-        for fila in sin_asignar:
-            f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+    _escribir_atomico(
+        OUTPUT_DIR / f"sin_ccaa_asignada_{sufijo}.jsonl",
+        (json.dumps(fila, ensure_ascii=False) for fila in sin_asignar),
+    )
 
 
 def main():

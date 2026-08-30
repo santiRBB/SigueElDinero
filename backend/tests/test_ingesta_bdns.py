@@ -155,3 +155,32 @@ def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
     sin_asignar_path = tmp_path / "sin_ccaa_asignada_2026-08.jsonl"
     with open(sin_asignar_path, encoding="utf-8") as f:
         assert len(f.readlines()) == 1
+
+
+def test_escribir_salidas_no_deja_archivo_final_si_falla_a_mitad(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    def lineas_que_fallan():
+        yield '{"ok": true}'
+        raise RuntimeError("se corto la escritura")
+
+    with pytest.raises(RuntimeError):
+        ingesta_bdns._escribir_atomico(tmp_path / "salida.jsonl", lineas_que_fallan())
+
+    assert not (tmp_path / "salida.jsonl").exists()
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_escribir_salidas_reemplaza_un_archivo_previo_completo(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    ingesta_bdns.escribir_salidas(2026, 8, {"09": {"importe_total_eur": 100.0, "n_concesiones": 1}}, [])
+    ingesta_bdns.escribir_salidas(2026, 8, {"01": {"importe_total_eur": 200.0, "n_concesiones": 2}}, [])
+
+    agregado_path = tmp_path / "agregado_ccaa_2026-08.jsonl"
+    with open(agregado_path, encoding="utf-8") as f:
+        filas = [json.loads(linea) for linea in f]
+    assert filas == [{
+        "codigo_ine": "01", "anio": 2026, "mes": 8,
+        "importe_total_eur": 200.0, "n_concesiones": 2,
+    }]
