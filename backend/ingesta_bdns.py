@@ -202,7 +202,7 @@ def main():
     log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     sufijo = f"{anio}-{mes:02d}"
-    with httpx.Client(timeout=15) as client:
+    with httpx.Client(timeout=30) as client:
         with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", "wt", encoding="utf-8") as raw_writer:
             totales_ccaa, sin_asignar, num_paginas = procesar_mes(anio, mes, client, raw_writer)
     escribir_salidas(anio, mes, totales_ccaa, sin_asignar)
