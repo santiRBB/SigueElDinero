@@ -7,6 +7,7 @@ Uso:
     python backfill_bdns.py --hasta 2026-08           # 2022-01 hasta agosto 2026
     python backfill_bdns.py --desde 2023-01 --hasta 2023-12
     python backfill_bdns.py --forzar                  # reprocesa incluso los meses ya completados
+    python backfill_bdns.py --rellenar-organismo      # ver seccion aparte mas abajo
 
 Cada mes es independiente e idempotente (ingesta_bdns.py sobrescribe por completo su propio mes),
 asi que si el backfill se corta a medias basta con volver a correr este script: los meses que ya
@@ -17,6 +18,15 @@ etc.) se reintenta completo hasta REINTENTOS_MES veces, con una pausa entre inte
 transitorio en la pagina 500 de 900 no te obliga a estar reiniciando el backfill a mano. Solo si un
 mes se sigue cayendo tras agotar esos reintentos se detiene todo el backfill (en vez de seguir con
 datos parciales silenciosos); volver a correr el script retoma justo desde ese mes.
+
+--rellenar-organismo:
+    agregado_ccaa_organismo_{YYYY-MM}.jsonl se agrego despues de que ya existiera este backfill, asi
+    que los meses backfilleados antes de esa fecha no tienen ese archivo. --rellenar-organismo NO
+    vuelve a pegarle a la API: para cada mes en el rango que ya tiene raw/{YYYY-MM}.jsonl.gz local
+    pero todavia no tiene agregado_ccaa_organismo_{YYYY-MM}.jsonl, lo reprocesa desde ese raw ya
+    descargado (`ingesta_bdns.py --mes X --desde-raw`). Usa el mismo --desde/--hasta que el modo
+    normal; --forzar no aplica a este modo (si algun dia hace falta forzar un reproceso puntual, se
+    borra a mano el agregado_ccaa_organismo_{YYYY-MM}.jsonl de ese mes y se vuelve a correr).
 """
 
 import argparse
@@ -85,6 +95,35 @@ def ejecutar_backfill(desde, hasta, forzar):
     print("Backfill completo.")
 
 
+def ejecutar_relleno_organismo(desde, hasta):
+    """Para cada mes en el rango que ya tiene raw/{mes}.jsonl.gz local pero todavia no tiene
+    agregado_ccaa_organismo_{mes}.jsonl, lo reprocesa desde ese raw (sin red) via
+    `ingesta_bdns.py --mes X --desde-raw`. Ver docstring del modulo."""
+    for anio, mes in generar_meses(desde, hasta):
+        sufijo = f"{anio}-{mes:02d}"
+        raw_path = OUTPUT_DIR / "raw" / f"{sufijo}.jsonl.gz"
+        organismo_path = OUTPUT_DIR / f"agregado_ccaa_organismo_{sufijo}.jsonl"
+
+        if not raw_path.exists():
+            print(f"[{sufijo}] sin raw local, salteando (correr el backfill normal primero)")
+            continue
+        if organismo_path.exists():
+            print(f"[{sufijo}] ya tiene organismo, salteando")
+            continue
+
+        print(f"[{sufijo}] reprocesando organismo desde raw local...")
+        resultado = subprocess.run(
+            [sys.executable, "ingesta_bdns.py", "--mes", sufijo, "--desde-raw"],
+            cwd=BACKEND_DIR,
+        )
+        if resultado.returncode != 0:
+            print(f"[{sufijo}] fallo (codigo {resultado.returncode}). Relleno detenido.")
+            print(f"Volve a correr este script para retomar desde {sufijo}.")
+            sys.exit(1)
+
+    print("Relleno de organismo completo.")
+
+
 def main():
     mes_actual_utc = datetime.now(timezone.utc).strftime("%Y-%m")
 
@@ -92,7 +131,15 @@ def main():
     parser.add_argument("--desde", default="2022-01", help="YYYY-MM (por defecto 2022-01)")
     parser.add_argument("--hasta", default=mes_actual_utc, help="YYYY-MM (por defecto el mes actual)")
     parser.add_argument("--forzar", action="store_true", help="reprocesa meses ya completados")
+    parser.add_argument(
+        "--rellenar-organismo", action="store_true",
+        help="solo rellena agregado_ccaa_organismo faltante desde raw local, sin red (ver docstring)",
+    )
     args = parser.parse_args()
+
+    if args.rellenar_organismo:
+        ejecutar_relleno_organismo(parse_mes(args.desde), parse_mes(args.hasta))
+        return
 
     ejecutar_backfill(parse_mes(args.desde), parse_mes(args.hasta), args.forzar)
 

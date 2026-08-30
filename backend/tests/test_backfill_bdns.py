@@ -113,3 +113,69 @@ def test_ejecutar_backfill_se_detiene_en_el_primer_mes_que_falla(tmp_path, monke
         backfill_bdns.ejecutar_backfill((2023, 1), (2023, 3), forzar=False)
 
     assert llamados == ["2023-01", "2023-02"]
+
+
+def _crear_raw(output_dir, sufijo):
+    raw_dir = output_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / f"{sufijo}.jsonl.gz").write_bytes(b"")
+
+
+def test_ejecutar_relleno_organismo_salta_mes_sin_raw_local(tmp_path, monkeypatch):
+    monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
+
+    llamadas = []
+    monkeypatch.setattr(backfill_bdns.subprocess, "run", lambda cmd, cwd: llamadas.append(cmd))
+
+    backfill_bdns.ejecutar_relleno_organismo((2023, 1), (2023, 1))
+
+    assert llamadas == []
+
+
+def test_ejecutar_relleno_organismo_salta_mes_que_ya_tiene_organismo(tmp_path, monkeypatch):
+    monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
+    _crear_raw(tmp_path, "2023-01")
+    (tmp_path / "agregado_ccaa_organismo_2023-01.jsonl").write_text("")
+
+    llamadas = []
+    monkeypatch.setattr(backfill_bdns.subprocess, "run", lambda cmd, cwd: llamadas.append(cmd))
+
+    backfill_bdns.ejecutar_relleno_organismo((2023, 1), (2023, 1))
+
+    assert llamadas == []
+
+
+def test_ejecutar_relleno_organismo_reprocesa_mes_con_raw_y_sin_organismo(tmp_path, monkeypatch):
+    monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
+    _crear_raw(tmp_path, "2023-01")
+
+    llamadas = []
+
+    def fake_run(cmd, cwd):
+        llamadas.append(cmd)
+        return ResultadoFake(0)
+
+    monkeypatch.setattr(backfill_bdns.subprocess, "run", fake_run)
+
+    backfill_bdns.ejecutar_relleno_organismo((2023, 1), (2023, 1))
+
+    assert llamadas == [[backfill_bdns.sys.executable, "ingesta_bdns.py", "--mes", "2023-01", "--desde-raw"]]
+
+
+def test_ejecutar_relleno_organismo_se_detiene_en_el_primer_mes_que_falla(tmp_path, monkeypatch):
+    monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
+    _crear_raw(tmp_path, "2023-01")
+    _crear_raw(tmp_path, "2023-02")
+
+    llamadas = []
+
+    def fake_run(cmd, cwd):
+        llamadas.append(cmd)
+        return ResultadoFake(1)
+
+    monkeypatch.setattr(backfill_bdns.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit):
+        backfill_bdns.ejecutar_relleno_organismo((2023, 1), (2023, 2))
+
+    assert len(llamadas) == 1

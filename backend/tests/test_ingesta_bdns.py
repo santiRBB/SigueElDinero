@@ -1,3 +1,4 @@
+import gzip
 import io
 import json
 
@@ -265,3 +266,48 @@ def test_recortar_top_organismos_n_mas_uno_agrega_un_solo_organismo_a_otros():
 
     assert len(recortado["09"]) == 16  # 15 top + OTROS
     assert recortado["09"]["OTROS"] == {"importe_total_eur": 1.0, "n_concesiones": 1}
+
+
+def test_reprocesar_desde_raw_lanza_si_no_existe_el_raw(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path / "raw")
+
+    with pytest.raises(SystemExit):
+        ingesta_bdns.reprocesar_desde_raw(2026, 8)
+
+
+def test_reprocesar_desde_raw_reconstruye_agregados_desde_el_raw_local(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", raw_dir)
+    raw_dir.mkdir()
+
+    filas_raw = [
+        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento A", "importe": 100.0},
+        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento B", "importe": 50.0},
+        {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
+    ]
+    with gzip.open(raw_dir / "2026-08.jsonl.gz", "wt", encoding="utf-8") as f:
+        for fila in filas_raw:
+            f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+
+    ingesta_bdns.reprocesar_desde_raw(2026, 8)
+
+    agregado_path = tmp_path / "agregado_ccaa_2026-08.jsonl"
+    with open(agregado_path, encoding="utf-8") as f:
+        fila = json.loads(f.readline())
+    assert fila == {
+        "codigo_ine": "09", "anio": 2026, "mes": 8,
+        "importe_total_eur": 150.0, "n_concesiones": 2,
+    }
+
+    organismo_path = tmp_path / "agregado_ccaa_organismo_2026-08.jsonl"
+    with open(organismo_path, encoding="utf-8") as f:
+        filas_org = [json.loads(linea) for linea in f]
+    assert {(f["organismo"], f["importe_total_eur"]) for f in filas_org} == {
+        ("Departamento A", 100.0), ("Departamento B", 50.0),
+    }
+
+    sin_asignar_path = tmp_path / "sin_ccaa_asignada_2026-08.jsonl"
+    with open(sin_asignar_path, encoding="utf-8") as f:
+        assert len(f.readlines()) == 1

@@ -7,6 +7,7 @@ sin API key.
 
 Uso:
     python ingesta_bdns.py --mes 2026-08
+    python ingesta_bdns.py --mes 2026-08 --desde-raw   # reprocesa desde raw/2026-08.jsonl.gz, sin red
 
 Salidas (en ./salida_bdns/):
     raw/{YYYY-MM}.jsonl.gz                 -> concesiones crudas de ese mes, tal cual las devuelve la API
@@ -108,6 +109,33 @@ def _get_con_reintentos(client, url, params):
             time.sleep(espera)
 
 
+def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar):
+    """Aplica resolver_ccaa a una fila y actualiza los tres acumuladores in-place. Reutilizada tanto
+    por procesar_mes (paginando la API en vivo) como por reprocesar_desde_raw (releyendo un
+    raw/*.jsonl.gz ya descargado, sin red) -- misma logica de agregacion sin importar de donde
+    vinieron las filas."""
+    codigo_ine = resolver_ccaa(fila)
+    if codigo_ine is None:
+        sin_asignar.append(fila)
+        return
+
+    importe = fila.get("importe") or 0.0
+
+    acumulado = totales_ccaa.setdefault(
+        codigo_ine, {"importe_total_eur": 0.0, "n_concesiones": 0}
+    )
+    acumulado["importe_total_eur"] += importe
+    acumulado["n_concesiones"] += 1
+
+    organismo = (fila.get("nivel3") or "").strip() or "SIN ORGANISMO"
+    org_dict = totales_organismo.setdefault(codigo_ine, {})
+    acumulado_org = org_dict.setdefault(
+        organismo, {"importe_total_eur": 0.0, "n_concesiones": 0}
+    )
+    acumulado_org["importe_total_eur"] += importe
+    acumulado_org["n_concesiones"] += 1
+
+
 def procesar_mes(anio, mes, client, raw_writer):
     """Pagina /concesiones/busqueda para un mes completo, agrega por CCAA y por organismo dentro de
     cada CCAA, y devuelve (totales_ccaa, totales_organismo, sin_asignar, num_paginas). Cada fila se
@@ -134,26 +162,7 @@ def procesar_mes(anio, mes, client, raw_writer):
 
         for fila in data["content"]:
             raw_writer.write(json.dumps(fila, ensure_ascii=False) + "\n")
-            codigo_ine = resolver_ccaa(fila)
-            if codigo_ine is None:
-                sin_asignar.append(fila)
-                continue
-
-            importe = fila.get("importe") or 0.0
-
-            acumulado = totales_ccaa.setdefault(
-                codigo_ine, {"importe_total_eur": 0.0, "n_concesiones": 0}
-            )
-            acumulado["importe_total_eur"] += importe
-            acumulado["n_concesiones"] += 1
-
-            organismo = (fila.get("nivel3") or "").strip() or "SIN ORGANISMO"
-            org_dict = totales_organismo.setdefault(codigo_ine, {})
-            acumulado_org = org_dict.setdefault(
-                organismo, {"importe_total_eur": 0.0, "n_concesiones": 0}
-            )
-            acumulado_org["importe_total_eur"] += importe
-            acumulado_org["n_concesiones"] += 1
+            _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar)
 
         if data.get("last", True) or not data["content"]:
             break
@@ -243,11 +252,56 @@ def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar):
     )
 
 
+def reprocesar_desde_raw(anio, mes):
+    """Reconstruye las salidas agregadas (agregado_ccaa, agregado_ccaa_organismo,
+    sin_ccaa_asignada) de un mes a partir de su raw/{YYYY-MM}.jsonl.gz ya descargado, sin volver a
+    pegarle a la API de BDNS. Pensado para poblar agregado_ccaa_organismo_{YYYY-MM}.jsonl en meses
+    que ya se habian backfilleado antes de que ese desglose existiera -- y de paso, si
+    ccaa_lookup.json crecio despues de esa corrida original, mejora tambien la asignacion a CCAA.
+
+    Lanza SystemExit si no existe el raw de ese mes (hace falta el original para reprocesar sin
+    red; no hay forma de reconstruirlo de otra manera)."""
+    sufijo = f"{anio}-{mes:02d}"
+    raw_path = RAW_DIR / f"{sufijo}.jsonl.gz"
+    if not raw_path.exists():
+        raise SystemExit(
+            f"No existe {raw_path} -- hace falta el raw original para reprocesar sin red "
+            f"(correr primero `python ingesta_bdns.py --mes {sufijo}` contra la API)."
+        )
+
+    log.info("Reprocesando %s desde raw local (sin red)...", sufijo)
+    totales_ccaa = {}
+    totales_organismo = {}
+    sin_asignar = []
+    with gzip.open(raw_path, "rt", encoding="utf-8") as f:
+        for linea in f:
+            fila = json.loads(linea)
+            _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar)
+
+    totales_organismo = recortar_top_organismos(totales_organismo)
+    escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
+
+    total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
+    log.info(
+        "Listo (desde raw). Filas: %d | CCAA con datos: %d | Sin asignar: %d",
+        total_filas, len(totales_ccaa), len(sin_asignar),
+    )
+    log.info("Salida en: %s", OUTPUT_DIR.resolve())
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mes", required=True, help="YYYY-MM")
+    parser.add_argument(
+        "--desde-raw", action="store_true",
+        help="reprocesa desde el raw/*.jsonl.gz ya descargado, sin red (requiere que ya exista)",
+    )
     args = parser.parse_args()
     anio, mes = (int(x) for x in args.mes.split("-"))
+
+    if args.desde_raw:
+        reprocesar_desde_raw(anio, mes)
+        return
 
     log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
     RAW_DIR.mkdir(parents=True, exist_ok=True)
