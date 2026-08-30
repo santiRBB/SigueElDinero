@@ -269,6 +269,15 @@ def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar):
     )
 
 
+def _ruta_marcador_completo(sufijo):
+    """Archivo vacio que solo existe cuando procesar_mes termino de paginar un mes entero con
+    exito (ver main()). Su ausencia es la unica forma confiable de distinguir un
+    raw/{sufijo}.jsonl.gz genuinamente completo de uno que quedo a medias por una corrida
+    interrumpida (timeout agotado, proceso cortado) -- ambos casos son gzips perfectamente
+    legibles, la diferencia no se nota mirando el archivo en si."""
+    return RAW_DIR / f"{sufijo}.completo"
+
+
 def reprocesar_desde_raw(anio, mes):
     """Reconstruye las salidas agregadas (agregado_ccaa, agregado_ccaa_organismo,
     sin_ccaa_asignada) de un mes a partir de su raw/{YYYY-MM}.jsonl.gz ya descargado, sin volver a
@@ -276,8 +285,9 @@ def reprocesar_desde_raw(anio, mes):
     que ya se habian backfilleado antes de que ese desglose existiera -- y de paso, si
     ccaa_lookup.json crecio despues de esa corrida original, mejora tambien la asignacion a CCAA.
 
-    Lanza SystemExit si no existe el raw de ese mes (hace falta el original para reprocesar sin
-    red; no hay forma de reconstruirlo de otra manera)."""
+    Lanza SystemExit si no existe el raw de ese mes, o si existe pero no tiene su marcador de mes
+    completo (ver _ruta_marcador_completo) -- reprocesar un raw parcial produciria un agregado
+    incompleto sin ningun aviso, exactamente el bug real que este chequeo existe para evitar."""
     sufijo = f"{anio}-{mes:02d}"
     raw_path = RAW_DIR / f"{sufijo}.jsonl.gz"
     if not raw_path.exists():
@@ -285,15 +295,31 @@ def reprocesar_desde_raw(anio, mes):
             f"No existe {raw_path} -- hace falta el raw original para reprocesar sin red "
             f"(correr primero `python ingesta_bdns.py --mes {sufijo}` contra la API)."
         )
+    if not _ruta_marcador_completo(sufijo).exists():
+        raise SystemExit(
+            f"{raw_path} existe pero no tiene marcador de mes completo -- probablemente quedo "
+            f"parcial por una corrida interrumpida. Reprocesarlo asi produciria un agregado "
+            f"incompleto sin avisar. Termina de bajarlo primero con "
+            f"`python ingesta_bdns.py --mes {sufijo} --continuar` (retoma desde donde quedo) "
+            f"o sin --continuar para arrancar de cero."
+        )
 
     log.info("Reprocesando %s desde raw local (sin red)...", sufijo)
     totales_ccaa = {}
     totales_organismo = {}
     sin_asignar = []
-    with gzip.open(raw_path, "rt", encoding="utf-8") as f:
-        for linea in f:
-            fila = json.loads(linea)
-            _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar)
+    try:
+        with gzip.open(raw_path, "rt", encoding="utf-8") as f:
+            for linea in f:
+                fila = json.loads(linea)
+                _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar)
+    except Exception as e:
+        raise SystemExit(
+            f"{raw_path} esta corrupto o incompleto ({e}) -- probablemente quedo asi por un corte "
+            f"abrupto del proceso (kill, corte de luz) mientras se escribia, no por una excepcion "
+            f"normal de Python. No se puede reprocesar sin red: hace falta volver a bajarlo con "
+            f"`python ingesta_bdns.py --mes {sufijo}` (sin --desde-raw)."
+        ) from e
 
     totales_organismo = recortar_top_organismos(totales_organismo)
     escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
@@ -376,6 +402,13 @@ def main():
         _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], 0)
     )
     modo_apertura = "at" if pagina_inicial else "wt"
+    marcador_completo = _ruta_marcador_completo(sufijo)
+    if modo_apertura == "wt":
+        # Arranque fresco (sin --continuar, o --continuar sin nada que retomar): invalidar
+        # cualquier marcador de una corrida completa anterior antes de truncar el raw, para que un
+        # fallo a mitad de este nuevo intento no deje un marcador "completo" apuntando a un raw
+        # que ahora esta truncado.
+        marcador_completo.unlink(missing_ok=True)
 
     with httpx.Client(timeout=30) as client:
         with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", modo_apertura, encoding="utf-8") as raw_writer:
@@ -384,6 +417,7 @@ def main():
                 totales_ccaa=totales_ccaa, totales_organismo=totales_organismo,
                 sin_asignar=sin_asignar, pagina_inicial=pagina_inicial,
             )
+    marcador_completo.touch()
     totales_organismo = recortar_top_organismos(totales_organismo)
     escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
 

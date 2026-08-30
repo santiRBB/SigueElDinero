@@ -178,20 +178,29 @@ def test_ejecutar_relleno_organismo_reprocesa_mes_con_raw_y_sin_organismo(tmp_pa
     assert llamadas == [[backfill_bdns.sys.executable, "ingesta_bdns.py", "--mes", "2023-01", "--desde-raw"]]
 
 
-def test_ejecutar_relleno_organismo_se_detiene_en_el_primer_mes_que_falla(tmp_path, monkeypatch):
+def test_ejecutar_relleno_organismo_sigue_con_el_resto_si_un_mes_falla(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
     _crear_raw(tmp_path, "2023-01")
     _crear_raw(tmp_path, "2023-02")
+    _crear_raw(tmp_path, "2023-03")
 
     llamadas = []
 
     def fake_run(cmd, cwd):
         llamadas.append(cmd)
-        return ResultadoFake(1)
+        sufijo = cmd[cmd.index("--mes") + 1]
+        return ResultadoFake(1) if sufijo == "2023-02" else ResultadoFake(0)
 
     monkeypatch.setattr(backfill_bdns.subprocess, "run", fake_run)
 
-    with pytest.raises(SystemExit):
-        backfill_bdns.ejecutar_relleno_organismo((2023, 1), (2023, 2))
+    # no debe lanzar SystemExit ni interrumpirse en el mes que falla
+    backfill_bdns.ejecutar_relleno_organismo((2023, 1), (2023, 3))
 
-    assert len(llamadas) == 1
+    # se intentaron los 3 meses, ninguno se salteo por el fallo de 2023-02
+    assert [cmd[cmd.index("--mes") + 1] for cmd in llamadas] == ["2023-01", "2023-02", "2023-03"]
+
+    lineas = capsys.readouterr().out.splitlines()
+    resumen = lineas[-2]
+    assert "2023-02" in resumen
+    assert "2023-01" not in resumen
+    assert "2023-03" not in resumen

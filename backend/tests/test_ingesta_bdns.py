@@ -342,6 +342,12 @@ def test_recortar_top_organismos_n_mas_uno_agrega_un_solo_organismo_a_otros():
     assert recortado["09"]["OTROS"] == {"importe_total_eur": 1.0, "n_concesiones": 1}
 
 
+def test_ruta_marcador_completo(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
+
+    assert ingesta_bdns._ruta_marcador_completo("2026-08") == tmp_path / "2026-08.completo"
+
+
 def test_cargar_checkpoint_sin_raw_devuelve_vacio(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
 
@@ -396,6 +402,34 @@ def test_reprocesar_desde_raw_lanza_si_no_existe_el_raw(tmp_path, monkeypatch):
         ingesta_bdns.reprocesar_desde_raw(2026, 8)
 
 
+def test_reprocesar_desde_raw_lanza_si_falta_el_marcador_de_completo(tmp_path, monkeypatch):
+    """El bug real que este chequeo existe para evitar: un raw que quedo parcial por una corrida
+    interrumpida es un gzip perfectamente legible -- sin el marcador, reprocesarlo produciria un
+    agregado incompleto sin ningun aviso."""
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", raw_dir)
+    raw_dir.mkdir()
+    with gzip.open(raw_dir / "2026-08.jsonl.gz", "wt", encoding="utf-8") as f:
+        f.write(json.dumps({"nivel1": "ESTATAL", "nivel2": None, "importe": 1.0}) + "\n")
+    # deliberadamente sin crear raw_dir / "2026-08.completo"
+
+    with pytest.raises(SystemExit, match="marcador de mes completo"):
+        ingesta_bdns.reprocesar_desde_raw(2026, 8)
+
+
+def test_reprocesar_desde_raw_lanza_mensaje_claro_si_el_raw_esta_corrupto(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", raw_dir)
+    raw_dir.mkdir()
+    (raw_dir / "2026-08.jsonl.gz").write_bytes(b"esto no es un gzip valido, quedo cortado a medias")
+    (raw_dir / "2026-08.completo").touch()
+
+    with pytest.raises(SystemExit, match="corrupto"):
+        ingesta_bdns.reprocesar_desde_raw(2026, 8)
+
+
 def test_reprocesar_desde_raw_reconstruye_agregados_desde_el_raw_local(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
     raw_dir = tmp_path / "raw"
@@ -410,6 +444,7 @@ def test_reprocesar_desde_raw_reconstruye_agregados_desde_el_raw_local(tmp_path,
     with gzip.open(raw_dir / "2026-08.jsonl.gz", "wt", encoding="utf-8") as f:
         for fila in filas_raw:
             f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+    (raw_dir / "2026-08.completo").touch()
 
     ingesta_bdns.reprocesar_desde_raw(2026, 8)
 

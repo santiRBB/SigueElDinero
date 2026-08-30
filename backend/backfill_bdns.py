@@ -104,7 +104,16 @@ def ejecutar_backfill(desde, hasta, forzar):
 def ejecutar_relleno_organismo(desde, hasta):
     """Para cada mes en el rango que ya tiene raw/{mes}.jsonl.gz local pero todavia no tiene
     agregado_ccaa_organismo_{mes}.jsonl, lo reprocesa desde ese raw (sin red) via
-    `ingesta_bdns.py --mes X --desde-raw`. Ver docstring del modulo."""
+    `ingesta_bdns.py --mes X --desde-raw`. Ver docstring del modulo.
+
+    A diferencia de ejecutar_backfill, un mes que falla aca NO detiene el resto: la causa mas
+    probable es que ese raw en particular este corrupto/incompleto (p.ej. por un corte abrupto de
+    un intento anterior), y volver a correr `--desde-raw` sobre el mismo archivo corrupto va a
+    fallar exactamente igual las veces que se reintente -- no es un fallo transitorio como un
+    timeout de red. Se saltea, se seguimos con los demas meses del rango, y se listan al final los
+    que fallaron para que se puedan volver a bajar con `ingesta_bdns.py --mes X` (sin --desde-raw,
+    contra la API real)."""
+    fallidos = []
     for anio, mes in generar_meses(desde, hasta):
         sufijo = f"{anio}-{mes:02d}"
         raw_path = OUTPUT_DIR / "raw" / f"{sufijo}.jsonl.gz"
@@ -123,11 +132,14 @@ def ejecutar_relleno_organismo(desde, hasta):
             cwd=BACKEND_DIR,
         )
         if resultado.returncode != 0:
-            print(f"[{sufijo}] fallo (codigo {resultado.returncode}). Relleno detenido.")
-            print(f"Volve a correr este script para retomar desde {sufijo}.")
-            sys.exit(1)
+            print(f"[{sufijo}] fallo (codigo {resultado.returncode}), probablemente raw corrupto. Sigo con el resto.")
+            fallidos.append(sufijo)
 
-    print("Relleno de organismo completo.")
+    if fallidos:
+        print(f"Relleno de organismo terminado con {len(fallidos)} mes(es) fallido(s): {', '.join(fallidos)}")
+        print("Volve a bajarlos con `python ingesta_bdns.py --mes X` (sin --desde-raw, contra la API real).")
+    else:
+        print("Relleno de organismo completo.")
 
 
 def main():
