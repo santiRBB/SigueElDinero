@@ -85,6 +85,90 @@ def resumen_ccaa(anio: int | None = None) -> list[dict]:
         conn.close()
 
 
+def detalle_ccaa(codigo_ine: str, anio: int | None = None) -> dict | None:
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "select ccaa_id, codigo_ine, nombre from dim_ccaa where codigo_ine = %s",
+                [codigo_ine],
+            )
+            ccaa = cur.fetchone()
+            if ccaa is None:
+                return None
+            ccaa_id = ccaa["ccaa_id"]
+
+            join_sql = "left join fact_gasto_ccaa f on f.ccaa_id = c.ccaa_id"
+            total_params: list = []
+            if anio is not None:
+                join_sql += " and f.anio = %s"
+                total_params.append(anio)
+            total_params.append(codigo_ine)
+
+            cur.execute(
+                f"""
+                select coalesce(sum(f.importe_total_eur), 0) as importe_total_eur,
+                       coalesce(sum(f.n_concesiones), 0) as n_concesiones
+                from dim_ccaa c
+                {join_sql}
+                where c.codigo_ine = %s
+                group by c.codigo_ine
+                """,
+                total_params,
+            )
+            totales = cur.fetchone()
+
+            org_sql = """
+                select organismo,
+                       sum(importe_total_eur) as importe_total_eur,
+                       sum(n_concesiones) as n_concesiones
+                from fact_gasto_ccaa_organismo
+                where ccaa_id = %s
+            """
+            org_params: list = [ccaa_id]
+            if anio is not None:
+                org_sql += " and anio = %s"
+                org_params.append(anio)
+            org_sql += " group by organismo order by importe_total_eur desc"
+            cur.execute(org_sql, org_params)
+            organismos = cur.fetchall()
+
+            return {
+                "ccaa": {"codigo_ine": ccaa["codigo_ine"], "nombre": ccaa["nombre"]},
+                "importe_total_eur": totales["importe_total_eur"],
+                "n_concesiones": totales["n_concesiones"],
+                "organismos": organismos,
+            }
+    finally:
+        conn.close()
+
+
+def ccaa_por_anio(codigo_ine: str) -> list[dict] | None:
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("select 1 as exists from dim_ccaa where codigo_ine = %s", [codigo_ine])
+            if cur.fetchone() is None:
+                return None
+
+            cur.execute(
+                """
+                select f.anio,
+                       coalesce(sum(f.importe_total_eur), 0) as importe_eur,
+                       coalesce(sum(f.n_concesiones), 0) as n_concesiones
+                from fact_gasto_ccaa f
+                join dim_ccaa c on c.ccaa_id = f.ccaa_id
+                where c.codigo_ine = %s
+                group by f.anio
+                order by f.anio
+                """,
+                [codigo_ine],
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
 def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
     conn = get_connection()
     try:

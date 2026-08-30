@@ -397,3 +397,95 @@ def test_resumen_ccaa_applies_anio_filter_in_join(monkeypatch):
     sql, params = cursor.executed[0]
     assert params == [2025]
     assert "left join fact_gasto_ccaa f on f.ccaa_id = c.ccaa_id and f.anio = %s" in sql
+
+
+def test_detalle_ccaa_returns_none_when_ccaa_not_found(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.detalle_ccaa("99")
+
+    assert result is None
+    assert conn.closed is True
+
+
+def test_detalle_ccaa_returns_ccaa_total_and_organismos(monkeypatch):
+    ccaa_row = {"ccaa_id": 9, "codigo_ine": "09", "nombre": "Cataluña"}
+    totales_row = {"importe_total_eur": 500.0, "n_concesiones": 3}
+    organismos_rows = [{"organismo": "Departamento A", "importe_total_eur": 300.0, "n_concesiones": 2}]
+
+    class MultiQueryCursor(FakeCursor):
+        def __init__(self):
+            super().__init__(rows=[])
+            self._responses = [[ccaa_row], [totales_row], organismos_rows]
+            self._call = 0
+
+        def fetchone(self):
+            row = self._responses[self._call][0] if self._responses[self._call] else None
+            self._call += 1
+            return row
+
+        def fetchall(self):
+            rows = self._responses[self._call]
+            self._call += 1
+            return rows
+
+    cursor = MultiQueryCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.detalle_ccaa("09", anio=2025)
+
+    assert result == {
+        "ccaa": {"codigo_ine": "09", "nombre": "Cataluña"},
+        "importe_total_eur": 500.0,
+        "n_concesiones": 3,
+        "organismos": organismos_rows,
+    }
+    assert len(cursor.executed) == 3
+    total_sql, total_params = cursor.executed[1]
+    assert "f.anio = %s" in total_sql
+    assert total_params == [2025, "09"]
+    org_sql, org_params = cursor.executed[2]
+    assert "and anio = %s" in org_sql
+    assert org_params == [9, 2025]
+
+
+def test_ccaa_por_anio_returns_none_when_ccaa_not_found(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    assert db.ccaa_por_anio("99") is None
+
+
+def test_ccaa_por_anio_returns_yearly_totals(monkeypatch):
+    anios_rows = [{"anio": 2025, "importe_eur": 500.0, "n_concesiones": 3}]
+
+    class MultiQueryCursor(FakeCursor):
+        def __init__(self):
+            super().__init__(rows=[])
+            self._responses = [[{"exists": 1}], anios_rows]
+            self._call = 0
+
+        def fetchone(self):
+            row = self._responses[self._call][0] if self._responses[self._call] else None
+            self._call += 1
+            return row
+
+        def fetchall(self):
+            rows = self._responses[self._call]
+            self._call += 1
+            return rows
+
+    cursor = MultiQueryCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.ccaa_por_anio("09")
+
+    assert result == anios_rows
+    assert len(cursor.executed) == 2
+    _, params = cursor.executed[1]
+    assert params == ["09"]
