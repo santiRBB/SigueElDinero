@@ -59,6 +59,32 @@ def resumen_paises(anio: int | None = None, grupo: str | None = None) -> list[di
         conn.close()
 
 
+def resumen_ccaa(anio: int | None = None) -> list[dict]:
+    join_sql = "left join fact_gasto_ccaa f on f.ccaa_id = c.ccaa_id"
+    params: list = []
+    if anio is not None:
+        join_sql += " and f.anio = %s"
+        params.append(anio)
+
+    sql = f"""
+        select c.codigo_ine, c.nombre,
+               coalesce(sum(f.importe_total_eur), 0) as importe_total_eur,
+               coalesce(sum(f.n_concesiones), 0) as n_concesiones
+        from dim_ccaa c
+        {join_sql}
+        group by c.codigo_ine, c.nombre
+        order by importe_total_eur desc
+    """
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
 def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
     conn = get_connection()
     try:

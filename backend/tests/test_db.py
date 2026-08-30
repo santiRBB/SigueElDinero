@@ -371,3 +371,29 @@ def test_buscar_proyectos_falls_back_to_default_orden_for_unknown_value(monkeypa
 
     results_sql, _ = cursor.executed[1]
     assert "order by f.importe_pais_eur desc" in results_sql
+
+
+def test_resumen_ccaa_without_anio_filter(monkeypatch):
+    rows = [{"codigo_ine": "09", "nombre": "Cataluña", "importe_total_eur": 500.0, "n_concesiones": 3}]
+    cursor = FakeCursor(rows)
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.resumen_ccaa()
+
+    assert result == rows
+    sql, params = cursor.executed[0]
+    assert params == []
+    assert "f.anio = %s" not in sql
+
+
+def test_resumen_ccaa_applies_anio_filter_in_join(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.resumen_ccaa(anio=2025)
+
+    sql, params = cursor.executed[0]
+    assert params == [2025]
+    assert "left join fact_gasto_ccaa f on f.ccaa_id = c.ccaa_id and f.anio = %s" in sql
