@@ -59,6 +59,16 @@ def test_resolver_ccaa_local_ayuntamiento_no_reconocido():
     assert ingesta_bdns.resolver_ccaa(fila) is None
 
 
+def test_resolver_ccaa_local_ayuntamiento_via_exacto():
+    fila = {"nivel1": "LOCAL", "nivel2": "Córdoba"}
+    assert ingesta_bdns.resolver_ccaa(fila) == "01"
+
+
+def test_resolver_ccaa_local_ayuntamiento_via_exacto_con_coma():
+    fila = {"nivel1": "LOCAL", "nivel2": "Vall d'Uixo, La"}
+    assert ingesta_bdns.resolver_ccaa(fila) == "10"
+
+
 def test_resolver_ccaa_estatal_devuelve_none():
     fila = {"nivel1": "ESTATAL", "nivel2": None}
     assert ingesta_bdns.resolver_ccaa(fila) is None

@@ -31,7 +31,28 @@
     "CIUDAD AUTONOMA DE MELILLA": "19",
     "MELILLA": "19"
   },
-  "local_exacto": {},
+  "local_exacto": {
+    "GRANADILLA DE ABONA": "05",
+    "CORDOBA": "01",
+    "MISLATA": "10",
+    "MALAGA": "01",
+    "DAIMIEL": "08",
+    "ALDAIA": "10",
+    "GIJON": "03",
+    "SANTANDER": "06",
+    "ALMUSSAFES": "10",
+    "ARONA": "05",
+    "DON BENITO": "11",
+    "MASNOU, EL": "09",
+    "LEIOA": "16",
+    "MADRID": "13",
+    "VALL D'UIXO, LA": "10",
+    "PAMPLONA/IRUNA": "15",
+    "DENIA": "10",
+    "QUART DE POBLET": "10",
+    "PONFERRADA": "07",
+    "PERAFORT": "09"
+  },
   "local_patron": {
     "diputacion": {
       "AVILA": "07", "BURGOS": "07", "LEON": "07", "PALENCIA": "07", "SALAMANCA": "07",
