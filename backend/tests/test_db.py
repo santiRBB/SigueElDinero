@@ -445,7 +445,7 @@ def test_detalle_ccaa_returns_ccaa_total_and_organismos(monkeypatch):
     }
     assert len(cursor.executed) == 3
     total_sql, total_params = cursor.executed[1]
-    assert "f.anio = %s" in total_sql
+    assert "left join fact_gasto_ccaa f on f.ccaa_id = c.ccaa_id and f.anio = %s" in total_sql
     assert total_params == [2025, "09"]
     org_sql, org_params = cursor.executed[2]
     assert "and anio = %s" in org_sql
