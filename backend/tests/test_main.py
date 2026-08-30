@@ -32,6 +32,33 @@ def test_resumen_without_query_params(monkeypatch):
     assert resp.json() == []
 
 
+def test_ccaa_resumen_passes_query_params_through(monkeypatch):
+    called_with = {}
+
+    def fake_resumen(anio=None):
+        called_with["anio"] = anio
+        return [{"codigo_ine": "09", "nombre": "Cataluña", "importe_total_eur": 500.0, "n_concesiones": 3}]
+
+    monkeypatch.setattr(main, "resumen_ccaa", fake_resumen)
+    client = TestClient(main.app)
+
+    resp = client.get("/api/ccaa/resumen", params={"anio": 2025})
+
+    assert resp.status_code == 200
+    assert resp.json() == [{"codigo_ine": "09", "nombre": "Cataluña", "importe_total_eur": 500.0, "n_concesiones": 3}]
+    assert called_with == {"anio": 2025}
+
+
+def test_ccaa_resumen_without_query_params(monkeypatch):
+    monkeypatch.setattr(main, "resumen_ccaa", lambda anio=None: [])
+    client = TestClient(main.app)
+
+    resp = client.get("/api/ccaa/resumen")
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 def test_detalle_returns_404_when_country_not_found(monkeypatch):
     monkeypatch.setattr(main, "detalle_pais", lambda iso_alpha3, anio=None: None)
     client = TestClient(main.app)

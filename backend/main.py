@@ -8,6 +8,7 @@ from db import (
     buscar_proyectos,
     detalle_pais,
     pais_por_anio,
+    resumen_ccaa,
     resumen_paises,
     resumen_por_anio,
     resumen_por_grupo,
@@ -30,6 +31,11 @@ app.add_middleware(
 @app.get("/api/paises/resumen")
 def get_resumen(anio: int | None = None, grupo: str | None = None):
     return resumen_paises(anio=anio, grupo=grupo)
+
+
+@app.get("/api/ccaa/resumen")
+def get_resumen_ccaa(anio: int | None = None):
+    return resumen_ccaa(anio=anio)
 
 
 @app.get("/api/paises/{iso_alpha3}/detalle")
