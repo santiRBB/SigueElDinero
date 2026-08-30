@@ -33,10 +33,10 @@ SALIDA_DIR = Path("./salida_bdns")
 
 
 def cargar():
-    archivos = sorted(SALIDA_DIR.glob("agregado_ccaa_*.jsonl"))
+    archivos = sorted(SALIDA_DIR.glob("agregado_ccaa_[0-9]*.jsonl"))
     if not archivos:
         raise SystemExit(
-            f"No hay archivos agregado_ccaa_*.jsonl en {SALIDA_DIR}. Ejecuta antes ingesta_bdns.py"
+            f"No hay archivos agregado_ccaa_[0-9]*.jsonl en {SALIDA_DIR}. Ejecuta antes ingesta_bdns.py"
         )
 
     filas = []
@@ -45,7 +45,15 @@ def cargar():
             for linea in f:
                 filas.append(json.loads(linea))
 
-    print(f"Leidas {len(filas)} filas de {len(archivos)} archivo(s)")
+    archivos_organismo = sorted(SALIDA_DIR.glob("agregado_ccaa_organismo_*.jsonl"))
+    filas_organismo = []
+    for archivo in archivos_organismo:
+        with open(archivo, "r", encoding="utf-8") as f:
+            for linea in f:
+                filas_organismo.append(json.loads(linea))
+
+    print(f"Leidas {len(filas)} filas de {len(archivos)} archivo(s) (fact_gasto_ccaa)")
+    print(f"Leidas {len(filas_organismo)} filas de {len(archivos_organismo)} archivo(s) (fact_gasto_ccaa_organismo)")
 
     conn = psycopg2.connect(DATABASE_URL)
     conn.autocommit = False
@@ -86,6 +94,37 @@ def cargar():
             registros,
         )
         print(f"fact_gasto_ccaa: {len(registros)} filas insertadas/actualizadas")
+
+        registros_organismo = []
+        for fila in filas_organismo:
+            ccaa_id = ccaa_id_por_codigo.get(fila["codigo_ine"])
+            if ccaa_id is None:
+                print(f"AVISO: codigo_ine desconocido {fila['codigo_ine']!r}, fila de organismo omitida")
+                continue
+            registros_organismo.append((
+                ccaa_id, fila["anio"], fila["mes"], fila["organismo"],
+                fila["importe_total_eur"], fila["n_concesiones"],
+            ))
+
+        meses_organismo = {(fila["anio"], fila["mes"]) for fila in filas_organismo}
+        if meses_organismo:
+            cur.execute(
+                "delete from fact_gasto_ccaa_organismo where (anio, mes) in %s",
+                (tuple(meses_organismo),),
+            )
+
+        psycopg2.extras.execute_values(
+            cur,
+            """
+            insert into fact_gasto_ccaa_organismo (ccaa_id, anio, mes, organismo, importe_total_eur, n_concesiones)
+            values %s
+            on conflict (ccaa_id, anio, mes, organismo) do update set
+                importe_total_eur = excluded.importe_total_eur,
+                n_concesiones = excluded.n_concesiones
+            """,
+            registros_organismo,
+        )
+        print(f"fact_gasto_ccaa_organismo: {len(registros_organismo)} filas insertadas/actualizadas")
 
         conn.commit()
         print("Carga completada correctamente.")
