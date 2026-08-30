@@ -1,0 +1,57 @@
+{
+  "autonomica": {
+    "ANDALUCIA": "01",
+    "ARAGON": "02",
+    "PRINCIPADO DE ASTURIAS": "03",
+    "ASTURIAS": "03",
+    "ILLES BALEARS": "04",
+    "ISLAS BALEARES": "04",
+    "CANARIAS": "05",
+    "CANTABRIA": "06",
+    "CASTILLA Y LEON": "07",
+    "CASTILLA-LA MANCHA": "08",
+    "CASTILLA LA MANCHA": "08",
+    "CATALUNA": "09",
+    "COMUNITAT VALENCIANA": "10",
+    "COMUNIDAD VALENCIANA": "10",
+    "EXTREMADURA": "11",
+    "GALICIA": "12",
+    "COMUNIDAD DE MADRID": "13",
+    "MADRID": "13",
+    "REGION DE MURCIA": "14",
+    "MURCIA": "14",
+    "COMUNIDAD FORAL DE NAVARRA": "15",
+    "NAVARRA": "15",
+    "PAIS VASCO": "16",
+    "EUSKADI": "16",
+    "LA RIOJA": "17",
+    "RIOJA": "17",
+    "CIUDAD AUTONOMA DE CEUTA": "18",
+    "CEUTA": "18",
+    "CIUDAD AUTONOMA DE MELILLA": "19",
+    "MELILLA": "19"
+  },
+  "local_exacto": {},
+  "local_patron": {
+    "diputacion": {
+      "AVILA": "07", "BURGOS": "07", "LEON": "07", "PALENCIA": "07", "SALAMANCA": "07",
+      "SEGOVIA": "07", "SORIA": "07", "VALLADOLID": "07", "ZAMORA": "07",
+      "ALMERIA": "01", "CADIZ": "01", "CORDOBA": "01", "GRANADA": "01", "HUELVA": "01",
+      "JAEN": "01", "MALAGA": "01", "SEVILLA": "01",
+      "HUESCA": "02", "TERUEL": "02", "ZARAGOZA": "02",
+      "ALBACETE": "08", "CIUDAD REAL": "08", "CUENCA": "08", "GUADALAJARA": "08", "TOLEDO": "08",
+      "BARCELONA": "09", "GIRONA": "09", "GERONA": "09", "LLEIDA": "09", "LERIDA": "09", "TARRAGONA": "09",
+      "ALICANTE": "10", "ALACANT": "10", "CASTELLON": "10", "CASTELLO": "10", "VALENCIA": "10",
+      "BADAJOZ": "11", "CACERES": "11",
+      "A CORUNA": "12", "LUGO": "12", "OURENSE": "12", "PONTEVEDRA": "12",
+      "ALAVA": "16", "ARABA": "16", "GIPUZKOA": "16", "GUIPUZCOA": "16", "BIZKAIA": "16", "VIZCAYA": "16"
+    },
+    "cabildo": {
+      "GRAN CANARIA": "05", "TENERIFE": "05", "LANZAROTE": "05", "FUERTEVENTURA": "05",
+      "LA PALMA": "05", "LA GOMERA": "05", "EL HIERRO": "05"
+    },
+    "consell": {
+      "MALLORCA": "04", "MENORCA": "04", "EIVISSA": "04", "IBIZA": "04", "FORMENTERA": "04"
+    }
+  }
+}
