@@ -56,3 +56,42 @@ create index if not exists idx_fact_gasto_anio on fact_gasto(start_date);
 -- Migracion idempotente para bases ya creadas antes de anadir url_bdns/bdns_tipo_convocatoria.
 alter table fact_gasto add column if not exists url_bdns text;
 alter table fact_gasto add column if not exists bdns_tipo_convocatoria text;
+
+-- Fase 2: concesiones BDNS agregadas por comunidad autonoma.
+create table if not exists dim_ccaa (
+    ccaa_id       serial primary key,
+    codigo_ine    varchar(2) unique not null,
+    nombre        text not null
+);
+
+insert into dim_ccaa (codigo_ine, nombre) values
+    ('01', 'Andalucía'),
+    ('02', 'Aragón'),
+    ('03', 'Principado de Asturias'),
+    ('04', 'Illes Balears'),
+    ('05', 'Canarias'),
+    ('06', 'Cantabria'),
+    ('07', 'Castilla y León'),
+    ('08', 'Castilla-La Mancha'),
+    ('09', 'Cataluña'),
+    ('10', 'Comunitat Valenciana'),
+    ('11', 'Extremadura'),
+    ('12', 'Galicia'),
+    ('13', 'Comunidad de Madrid'),
+    ('14', 'Región de Murcia'),
+    ('15', 'Comunidad Foral de Navarra'),
+    ('16', 'País Vasco'),
+    ('17', 'La Rioja'),
+    ('18', 'Ceuta'),
+    ('19', 'Melilla')
+on conflict (codigo_ine) do nothing;
+
+create table if not exists fact_gasto_ccaa (
+    ccaa_id             int references dim_ccaa(ccaa_id),
+    anio                int not null,
+    mes                 int not null,
+    importe_total_eur   numeric(16,2) not null,
+    n_concesiones       int not null,
+    fecha_actualizacion timestamptz default now(),
+    primary key (ccaa_id, anio, mes)
+);
