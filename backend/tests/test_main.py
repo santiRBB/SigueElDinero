@@ -189,3 +189,61 @@ def test_buscar_proyectos_endpoint_defaults(monkeypatch):
 
     assert resp.status_code == 200
     assert called_with == {"q": None, "pagina": 1, "por_pagina": 30, "orden": None}
+
+
+def test_detalle_ccaa_returns_404_when_not_found(monkeypatch):
+    monkeypatch.setattr(main, "detalle_ccaa", lambda codigo_ine, anio=None: None)
+    client = TestClient(main.app)
+
+    resp = client.get("/api/ccaa/99/detalle")
+
+    assert resp.status_code == 404
+
+
+def test_detalle_ccaa_returns_data_when_found(monkeypatch):
+    fake = {
+        "ccaa": {"codigo_ine": "09", "nombre": "Cataluña"},
+        "importe_total_eur": 500.0, "n_concesiones": 3, "organismos": [],
+    }
+    called_with = {}
+
+    def fake_detalle(codigo_ine, anio=None):
+        called_with["codigo_ine"] = codigo_ine
+        called_with["anio"] = anio
+        return fake
+
+    monkeypatch.setattr(main, "detalle_ccaa", fake_detalle)
+    client = TestClient(main.app)
+
+    resp = client.get("/api/ccaa/09/detalle", params={"anio": 2025})
+
+    assert resp.status_code == 200
+    assert resp.json() == fake
+    assert called_with == {"codigo_ine": "09", "anio": 2025}
+
+
+def test_ccaa_por_anio_returns_404_when_not_found(monkeypatch):
+    monkeypatch.setattr(main, "ccaa_por_anio", lambda codigo_ine: None)
+    client = TestClient(main.app)
+
+    resp = client.get("/api/ccaa/99/por-anio")
+
+    assert resp.status_code == 404
+
+
+def test_ccaa_por_anio_returns_data_when_found(monkeypatch):
+    fake = [{"anio": 2025, "importe_eur": 500.0, "n_concesiones": 3}]
+    called_with = {}
+
+    def fake_por_anio(codigo_ine):
+        called_with["codigo_ine"] = codigo_ine
+        return fake
+
+    monkeypatch.setattr(main, "ccaa_por_anio", fake_por_anio)
+    client = TestClient(main.app)
+
+    resp = client.get("/api/ccaa/09/por-anio")
+
+    assert resp.status_code == 200
+    assert resp.json() == fake
+    assert called_with == {"codigo_ine": "09"}

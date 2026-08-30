@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from db import (
     anios_disponibles,
     buscar_proyectos,
+    ccaa_por_anio,
+    detalle_ccaa,
     detalle_pais,
     pais_por_anio,
     resumen_ccaa,
@@ -36,6 +38,22 @@ def get_resumen(anio: int | None = None, grupo: str | None = None):
 @app.get("/api/ccaa/resumen")
 def get_resumen_ccaa(anio: int | None = None):
     return resumen_ccaa(anio=anio)
+
+
+@app.get("/api/ccaa/{codigo_ine}/detalle")
+def get_detalle_ccaa(codigo_ine: str, anio: int | None = None):
+    detalle = detalle_ccaa(codigo_ine, anio=anio)
+    if detalle is None:
+        raise HTTPException(status_code=404, detail="CCAA no encontrada")
+    return detalle
+
+
+@app.get("/api/ccaa/{codigo_ine}/por-anio")
+def get_ccaa_por_anio(codigo_ine: str):
+    datos = ccaa_por_anio(codigo_ine)
+    if datos is None:
+        raise HTTPException(status_code=404, detail="CCAA no encontrada")
+    return datos
 
 
 @app.get("/api/paises/{iso_alpha3}/detalle")
