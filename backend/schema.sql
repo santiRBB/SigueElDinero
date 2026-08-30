@@ -95,3 +95,13 @@ create table if not exists fact_gasto_ccaa (
     fecha_actualizacion timestamptz default now(),
     primary key (ccaa_id, anio, mes)
 );
+
+create table if not exists fact_gasto_ccaa_organismo (
+    ccaa_id             int references dim_ccaa(ccaa_id),
+    anio                int not null,
+    mes                 int not null,
+    organismo           text not null,
+    importe_total_eur   numeric(16,2) not null,
+    n_concesiones       int not null,
+    primary key (ccaa_id, anio, mes, organismo)
+);
