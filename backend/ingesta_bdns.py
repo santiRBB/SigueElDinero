@@ -81,3 +81,63 @@ def resolver_ccaa(fila):
         return None
 
     return None
+
+
+def ultimo_dia_mes(anio, mes):
+    return calendar.monthrange(anio, mes)[1]
+
+
+def _get_con_reintentos(client, url, params):
+    for intento in range(1, REINTENTOS + 1):
+        try:
+            resp = client.get(url, params=params)
+            resp.raise_for_status()
+            return resp
+        except Exception as e:
+            if intento == REINTENTOS:
+                raise
+            espera = PAUSA_ENTRE_PAGINAS * (2 ** intento)
+            log.warning(
+                "Fallo en pagina %s (intento %d/%d): %s -- reintentando en %.1fs",
+                params.get("page"), intento, REINTENTOS, e, espera,
+            )
+            time.sleep(espera)
+
+
+def procesar_mes(anio, mes, client):
+    """Pagina /concesiones/busqueda para un mes completo, agrega por CCAA y devuelve
+    (totales_ccaa, sin_asignar, filas_raw) sin tocar disco -- quien llama decide que hacer
+    con el resultado (ver escribir_salidas)."""
+    fecha_desde = f"01/{mes:02d}/{anio}"
+    fecha_hasta = f"{ultimo_dia_mes(anio, mes):02d}/{mes:02d}/{anio}"
+
+    totales_ccaa = {}
+    sin_asignar = []
+    filas_raw = []
+
+    page = 0
+    while True:
+        resp = _get_con_reintentos(client, BUSQUEDA_URL, {
+            "page": page, "pageSize": PAGE_SIZE,
+            "fechaDesde": fecha_desde, "fechaHasta": fecha_hasta,
+        })
+        data = resp.json()
+
+        for fila in data["content"]:
+            filas_raw.append(fila)
+            codigo_ine = resolver_ccaa(fila)
+            if codigo_ine is None:
+                sin_asignar.append(fila)
+                continue
+            acumulado = totales_ccaa.setdefault(
+                codigo_ine, {"importe_total_eur": 0.0, "n_concesiones": 0}
+            )
+            acumulado["importe_total_eur"] += fila.get("importe") or 0.0
+            acumulado["n_concesiones"] += 1
+
+        if data.get("last", True) or not data["content"]:
+            break
+        page += 1
+        time.sleep(PAUSA_ENTRE_PAGINAS)
+
+    return totales_ccaa, sin_asignar, filas_raw

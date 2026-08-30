@@ -1,4 +1,28 @@
+import pytest
+
 import ingesta_bdns
+
+
+class FakeResponsePagina:
+    def __init__(self, content, last):
+        self._content = content
+        self._last = last
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"content": self._content, "last": self._last}
+
+
+class FakeClientPaginado:
+    def __init__(self, paginas):
+        self.paginas = paginas
+        self.llamadas = []
+
+    def get(self, url, params=None):
+        self.llamadas.append((url, dict(params)))
+        return self.paginas[params["page"]]
 
 
 def test_normalizar_strips_accents_and_collapses_spaces():
@@ -35,3 +59,60 @@ def test_resolver_ccaa_local_ayuntamiento_no_reconocido():
 def test_resolver_ccaa_estatal_devuelve_none():
     fila = {"nivel1": "ESTATAL", "nivel2": None}
     assert ingesta_bdns.resolver_ccaa(fila) is None
+
+
+def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    paginas = [
+        FakeResponsePagina(content=[
+            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 100.0},
+            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 50.0},
+        ], last=False),
+        FakeResponsePagina(content=[
+            {"nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "importe": 30.0},
+            {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
+        ], last=True),
+    ]
+    client = FakeClientPaginado(paginas)
+
+    totales, sin_asignar, filas_raw = ingesta_bdns.procesar_mes(2026, 8, client)
+
+    assert totales == {
+        "09": {"importe_total_eur": 150.0, "n_concesiones": 2},
+        "05": {"importe_total_eur": 30.0, "n_concesiones": 1},
+    }
+    assert len(sin_asignar) == 1
+    assert sin_asignar[0]["nivel1"] == "ESTATAL"
+    assert len(filas_raw) == 4
+    assert client.llamadas[0][1]["fechaDesde"] == "01/08/2026"
+    assert client.llamadas[0][1]["fechaHasta"] == "31/08/2026"
+    assert client.llamadas[1][1]["page"] == 1
+
+
+def test_procesar_mes_reintenta_ante_fallo_de_red(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    intentos = {"n": 0}
+
+    class FlakyClient:
+        def get(self, url, params=None):
+            intentos["n"] += 1
+            if intentos["n"] < 3:
+                raise RuntimeError("network down")
+            return FakeResponsePagina(content=[], last=True)
+
+    totales, sin_asignar, filas_raw = ingesta_bdns.procesar_mes(2026, 8, FlakyClient())
+
+    assert intentos["n"] == 3
+    assert totales == {}
+    assert filas_raw == []
+
+
+def test_procesar_mes_lanza_tras_agotar_reintentos(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+
+    class SiempreFalla:
+        def get(self, url, params=None):
+            raise RuntimeError("network down")
+
+    with pytest.raises(RuntimeError):
+        ingesta_bdns.procesar_mes(2026, 8, SiempreFalla())
