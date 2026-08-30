@@ -14,10 +14,13 @@ asi que si el backfill se corta a medias basta con volver a correr este script: 
 tienen agregado_ccaa_{YYYY-MM}.jsonl se saltan salvo --forzar.
 
 Un mes que falla (timeout de red, error HTTP tras agotar los reintentos internos de ingesta_bdns.py,
-etc.) se reintenta completo hasta REINTENTOS_MES veces, con una pausa entre intentos -- un fallo
-transitorio en la pagina 500 de 900 no te obliga a estar reiniciando el backfill a mano. Solo si un
-mes se sigue cayendo tras agotar esos reintentos se detiene todo el backfill (en vez de seguir con
-datos parciales silenciosos); volver a correr el script retoma justo desde ese mes.
+etc.) se reintenta hasta REINTENTOS_MES veces, con una pausa entre intentos -- un fallo transitorio
+en la pagina 500 de 900 no te obliga a estar reiniciando el backfill a mano. El primer intento de
+cada mes siempre arranca de pagina 0; del segundo intento en adelante se pasa --continuar a
+ingesta_bdns.py, que retoma desde el raw parcial que dejo el intento anterior (esas paginas ya
+quedaron completas e integras en disco) en vez de volver a pedirlas todas. Solo si un mes se sigue
+cayendo tras agotar esos reintentos se detiene todo el backfill (en vez de seguir con datos
+parciales silenciosos); volver a correr el script retoma justo desde ese mes.
 
 --rellenar-organismo:
     agregado_ccaa_organismo_{YYYY-MM}.jsonl se agrego despues de que ya existiera este backfill, asi
@@ -59,13 +62,16 @@ def generar_meses(desde, hasta):
 
 
 def ejecutar_mes(sufijo):
-    """Corre ingesta_bdns.py para un mes, reintentando el mes completo ante un fallo. Devuelve True
-    si termino con exito, False si se agotaron los reintentos."""
+    """Corre ingesta_bdns.py para un mes, reintentando ante un fallo. El primer intento siempre
+    arranca de cero (mismo comportamiento e idempotencia de siempre); del segundo intento en
+    adelante se pasa --continuar, para retomar desde el raw parcial que haya quedado del intento
+    anterior en vez de volver a pedir todas las paginas ya bajadas. Devuelve True si termino con
+    exito, False si se agotaron los reintentos."""
     for intento in range(1, REINTENTOS_MES + 1):
-        resultado = subprocess.run(
-            [sys.executable, "ingesta_bdns.py", "--mes", sufijo],
-            cwd=BACKEND_DIR,
-        )
+        cmd = [sys.executable, "ingesta_bdns.py", "--mes", sufijo]
+        if intento > 1:
+            cmd.append("--continuar")
+        resultado = subprocess.run(cmd, cwd=BACKEND_DIR)
         if resultado.returncode == 0:
             return True
         if intento < REINTENTOS_MES:

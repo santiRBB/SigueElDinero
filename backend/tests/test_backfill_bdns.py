@@ -74,6 +74,22 @@ def test_ejecutar_mes_agota_reintentos_y_devuelve_false(monkeypatch):
     assert len(llamadas) == backfill_bdns.REINTENTOS_MES
 
 
+def test_ejecutar_mes_pasa_continuar_solo_a_partir_del_segundo_intento(monkeypatch):
+    llamadas = []
+
+    def fake_run(cmd, cwd):
+        llamadas.append(cmd)
+        return ResultadoFake(1) if len(llamadas) < 3 else ResultadoFake(0)
+
+    monkeypatch.setattr(backfill_bdns.subprocess, "run", fake_run)
+    monkeypatch.setattr(backfill_bdns.time, "sleep", lambda s: None)
+
+    assert backfill_bdns.ejecutar_mes("2026-08") is True
+    assert "--continuar" not in llamadas[0]
+    assert "--continuar" in llamadas[1]
+    assert "--continuar" in llamadas[2]
+
+
 def test_ejecutar_backfill_salta_meses_ya_procesados(tmp_path, monkeypatch):
     monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
     (tmp_path / "agregado_ccaa_2023-01.jsonl").write_text("")

@@ -75,6 +75,52 @@ def test_resolver_ccaa_estatal_devuelve_none():
     assert ingesta_bdns.resolver_ccaa(fila) is None
 
 
+class FakeResponseJsonRota:
+    """Simula una respuesta HTTP que llega bien (2xx) pero cuyo cuerpo no se puede parsear como
+    JSON -- para probar que _get_con_reintentos tambien reintenta ante esto, no solo ante fallos
+    de red (caso real visto en produccion: UnicodeDecodeError al parsear resp.json())."""
+
+    def __init__(self, data=None, fallar=False):
+        self._data = data
+        self._fallar = fallar
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        if self._fallar:
+            raise UnicodeDecodeError("utf-8", b"\xf3", 0, 1, "invalid continuation byte")
+        return self._data
+
+
+def test_get_con_reintentos_reintenta_ante_json_corrupto(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    respuestas = iter([
+        FakeResponseJsonRota(fallar=True),
+        FakeResponseJsonRota(fallar=True),
+        FakeResponseJsonRota(data={"content": [], "last": True}),
+    ])
+
+    class ClientePaginaRota:
+        def get(self, url, params=None):
+            return next(respuestas)
+
+    data = ingesta_bdns._get_con_reintentos(ClientePaginaRota(), ingesta_bdns.BUSQUEDA_URL, {"page": 0})
+
+    assert data == {"content": [], "last": True}
+
+
+def test_get_con_reintentos_lanza_tras_agotar_reintentos_por_json_corrupto(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+
+    class ClienteSiempreJsonRoto:
+        def get(self, url, params=None):
+            return FakeResponseJsonRota(fallar=True)
+
+    with pytest.raises(UnicodeDecodeError):
+        ingesta_bdns._get_con_reintentos(ClienteSiempreJsonRoto(), ingesta_bdns.BUSQUEDA_URL, {"page": 0})
+
+
 def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
     monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
     paginas = [
@@ -145,6 +191,34 @@ def test_procesar_mes_lanza_tras_agotar_reintentos(monkeypatch):
 
     with pytest.raises(RuntimeError):
         ingesta_bdns.procesar_mes(2026, 8, SiempreFalla(), io.StringIO())
+
+
+def test_procesar_mes_arranca_desde_pagina_inicial_con_acumuladores_previos(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+
+    class ClienteDesdePagina5:
+        def __init__(self):
+            self.llamadas = []
+
+        def get(self, url, params=None):
+            self.llamadas.append(dict(params))
+            return FakeResponsePagina(content=[
+                {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento C", "importe": 10.0},
+            ], last=True)
+
+    client = ClienteDesdePagina5()
+    raw_writer = io.StringIO()
+    totales_previos = {"09": {"importe_total_eur": 100.0, "n_concesiones": 1}}
+
+    totales, totales_org, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(
+        2026, 8, client, raw_writer,
+        totales_ccaa=totales_previos, pagina_inicial=5,
+    )
+
+    assert len(client.llamadas) == 1
+    assert client.llamadas[0]["page"] == 5
+    assert totales["09"] == {"importe_total_eur": 110.0, "n_concesiones": 2}
+    assert num_paginas == 1
 
 
 def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
@@ -266,6 +340,52 @@ def test_recortar_top_organismos_n_mas_uno_agrega_un_solo_organismo_a_otros():
 
     assert len(recortado["09"]) == 16  # 15 top + OTROS
     assert recortado["09"]["OTROS"] == {"importe_total_eur": 1.0, "n_concesiones": 1}
+
+
+def test_cargar_checkpoint_sin_raw_devuelve_vacio(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
+
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], 0)
+
+
+def test_cargar_checkpoint_retoma_desde_paginas_completas(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(ingesta_bdns, "PAGE_SIZE", 2)
+
+    filas = [
+        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento A", "importe": 10.0},
+        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento B", "importe": 20.0},
+        {"nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "nivel3": "Cabildo", "importe": 30.0},
+        {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
+    ]
+    with gzip.open(tmp_path / "2026-08.jsonl.gz", "wt", encoding="utf-8") as f:
+        for fila in filas:
+            f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+
+    totales_ccaa, totales_organismo, sin_asignar, pagina_inicial = ingesta_bdns._cargar_checkpoint("2026-08")
+
+    assert pagina_inicial == 2  # 4 filas / PAGE_SIZE(2)
+    assert totales_ccaa["09"] == {"importe_total_eur": 30.0, "n_concesiones": 2}
+    assert totales_ccaa["05"] == {"importe_total_eur": 30.0, "n_concesiones": 1}
+    assert len(sin_asignar) == 1
+
+
+def test_cargar_checkpoint_menos_de_una_pagina_completa_arranca_de_cero(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
+
+    with gzip.open(tmp_path / "2026-08.jsonl.gz", "wt", encoding="utf-8") as f:
+        f.write(json.dumps(
+            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 10.0}, ensure_ascii=False,
+        ) + "\n")
+
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], 0)
+
+
+def test_cargar_checkpoint_raw_illegible_arranca_de_cero(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
+    (tmp_path / "2026-08.jsonl.gz").write_bytes(b"esto no es un gzip valido")
+
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], 0)
 
 
 def test_reprocesar_desde_raw_lanza_si_no_existe_el_raw(tmp_path, monkeypatch):

@@ -8,6 +8,7 @@ sin API key.
 Uso:
     python ingesta_bdns.py --mes 2026-08
     python ingesta_bdns.py --mes 2026-08 --desde-raw   # reprocesa desde raw/2026-08.jsonl.gz, sin red
+    python ingesta_bdns.py --mes 2026-08 --continuar   # retoma un raw parcial en vez de arrancar de 0
 
 Salidas (en ./salida_bdns/):
     raw/{YYYY-MM}.jsonl.gz                 -> concesiones crudas de ese mes, tal cual las devuelve la API
@@ -93,11 +94,17 @@ def ultimo_dia_mes(anio, mes):
 
 
 def _get_con_reintentos(client, url, params):
+    """Pide una pagina con reintentos: cubre tanto el fallo de red (client.get/raise_for_status)
+    como el de parseo del cuerpo (resp.json()) con la misma logica de backoff. Una respuesta que
+    llego pero vino corrupta (JSON invalido, codificacion invalida -- se vio en produccion bajo
+    carga con varias corridas en paralelo) es tan transitoria como un timeout de red; antes se
+    escapaba de este reintento y tiraba todo el mes en curso en vez de solo esa pagina. Devuelve el
+    dict ya parseado, no la respuesta cruda."""
     for intento in range(1, REINTENTOS + 1):
         try:
             resp = client.get(url, params=params)
             resp.raise_for_status()
-            return resp
+            return resp.json()
         except Exception as e:
             if intento == REINTENTOS:
                 raise
@@ -136,28 +143,38 @@ def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar):
     acumulado_org["n_concesiones"] += 1
 
 
-def procesar_mes(anio, mes, client, raw_writer):
-    """Pagina /concesiones/busqueda para un mes completo, agrega por CCAA y por organismo dentro de
-    cada CCAA, y devuelve (totales_ccaa, totales_organismo, sin_asignar, num_paginas). Cada fila se
-    escribe a medida que llega en raw_writer (cualquier objeto con .write(str) -> None, p.ej. un
-    gzip.open(...) en modo texto) -- no acumula las filas crudas en memoria. Quien llama controla el
-    ciclo de vida del archivo (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite
-    detectar en los logs una respuesta prematuramente truncada por la API."""
+def procesar_mes(
+    anio, mes, client, raw_writer,
+    totales_ccaa=None, totales_organismo=None, sin_asignar=None, pagina_inicial=0,
+):
+    """Pagina /concesiones/busqueda desde pagina_inicial (0 por defecto, es decir el mes completo)
+    hasta el final, agrega por CCAA y por organismo dentro de cada CCAA, y devuelve (totales_ccaa,
+    totales_organismo, sin_asignar, num_paginas). Cada fila se escribe a medida que llega en
+    raw_writer (cualquier objeto con .write(str) -> None, p.ej. un gzip.open(...) en modo texto) --
+    no acumula las filas crudas en memoria. Quien llama controla el ciclo de vida del archivo
+    (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite detectar en los logs una
+    respuesta prematuramente truncada por la API.
+
+    totales_ccaa/totales_organismo/sin_asignar aceptan acumuladores ya iniciados (en vez de vacios)
+    para retomar un mes cortado a mitad de camino -- ver main() y el flag --continuar: como cada
+    fila ya escrita en el raw de una corrida anterior sigue integra en disco (el gzip se cierra bien
+    incluso si procesar_mes termina en excepcion, solo un kill del proceso lo dejaria a medias),
+    alcanza con re-sumar esas filas y pedir desde pagina_inicial en adelante, en vez de reprocesar
+    el mes entero de nuevo."""
     fecha_desde = f"01/{mes:02d}/{anio}"
     fecha_hasta = f"{ultimo_dia_mes(anio, mes):02d}/{mes:02d}/{anio}"
 
-    totales_ccaa = {}
-    totales_organismo = {}
-    sin_asignar = []
+    totales_ccaa = {} if totales_ccaa is None else totales_ccaa
+    totales_organismo = {} if totales_organismo is None else totales_organismo
+    sin_asignar = [] if sin_asignar is None else sin_asignar
 
-    page = 0
+    page = pagina_inicial
     num_paginas = 0
     while True:
-        resp = _get_con_reintentos(client, BUSQUEDA_URL, {
+        data = _get_con_reintentos(client, BUSQUEDA_URL, {
             "page": page, "pageSize": PAGE_SIZE,
             "fechaDesde": fecha_desde, "fechaHasta": fecha_hasta,
         })
-        data = resp.json()
         num_paginas += 1
 
         for fila in data["content"]:
@@ -289,12 +306,60 @@ def reprocesar_desde_raw(anio, mes):
     log.info("Salida en: %s", OUTPUT_DIR.resolve())
 
 
+def _cargar_checkpoint(sufijo):
+    """Si existe un raw/{sufijo}.jsonl.gz de un intento anterior de este mes, lo relee para
+    reconstruir los acumuladores y calcula desde que pagina seguir (filas ya en disco entre
+    PAGE_SIZE -- todas las paginas ya escritas estan completas, nunca a medias: procesar_mes solo
+    escribe las filas de una pagina despues de haberla pedido entera con exito). Devuelve
+    (totales_ccaa, totales_organismo, sin_asignar, pagina_inicial).
+
+    Si no hay nada que retomar, si el raw existente tiene menos de una pagina completa, o si no se
+    puede leer (p.ej. quedo a medias por un kill del proceso, no por una excepcion normal de
+    Python), devuelve acumuladores vacios y pagina_inicial=0 -- en esos casos el caller trunca el
+    raw y arranca de cero, exactamente igual que sin --continuar."""
+    raw_path = RAW_DIR / f"{sufijo}.jsonl.gz"
+    if not raw_path.exists():
+        return {}, {}, [], 0
+
+    totales_ccaa = {}
+    totales_organismo = {}
+    sin_asignar = []
+    n_filas_previas = 0
+    try:
+        with gzip.open(raw_path, "rt", encoding="utf-8") as f:
+            for linea in f:
+                _acumular_fila(json.loads(linea), totales_ccaa, totales_organismo, sin_asignar)
+                n_filas_previas += 1
+    except Exception as e:
+        log.warning("No se pudo leer el raw parcial de %s (%s) -- arrancando de cero.", sufijo, e)
+        return {}, {}, [], 0
+
+    pagina_inicial = n_filas_previas // PAGE_SIZE
+    if pagina_inicial == 0:
+        # Menos de una pagina completa en disco -- se descarta y se arranca de cero (el caller
+        # trunca el raw), en vez de arriesgarse a contar dos veces esas filas cuando la pagina 0
+        # se vuelva a pedir.
+        return {}, {}, [], 0
+
+    log.info(
+        "Retomando %s desde un raw parcial (%d filas ya en disco, pagina %d)...",
+        sufijo, n_filas_previas, pagina_inicial,
+    )
+    return totales_ccaa, totales_organismo, sin_asignar, pagina_inicial
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mes", required=True, help="YYYY-MM")
     parser.add_argument(
         "--desde-raw", action="store_true",
         help="reprocesa desde el raw/*.jsonl.gz ya descargado, sin red (requiere que ya exista)",
+    )
+    parser.add_argument(
+        "--continuar", action="store_true",
+        help="si ya existe un raw/*.jsonl.gz parcial de un intento anterior de este mes (p.ej. "
+             "cortado por un fallo), retoma desde ahi en vez de empezar de cero. Si no existe, "
+             "arranca igual que sin este flag.",
     )
     args = parser.parse_args()
     anio, mes = (int(x) for x in args.mes.split("-"))
@@ -306,9 +371,19 @@ def main():
     log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     sufijo = f"{anio}-{mes:02d}"
+
+    totales_ccaa, totales_organismo, sin_asignar, pagina_inicial = (
+        _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], 0)
+    )
+    modo_apertura = "at" if pagina_inicial else "wt"
+
     with httpx.Client(timeout=30) as client:
-        with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", "wt", encoding="utf-8") as raw_writer:
-            totales_ccaa, totales_organismo, sin_asignar, num_paginas = procesar_mes(anio, mes, client, raw_writer)
+        with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", modo_apertura, encoding="utf-8") as raw_writer:
+            totales_ccaa, totales_organismo, sin_asignar, num_paginas = procesar_mes(
+                anio, mes, client, raw_writer,
+                totales_ccaa=totales_ccaa, totales_organismo=totales_organismo,
+                sin_asignar=sin_asignar, pagina_inicial=pagina_inicial,
+            )
     totales_organismo = recortar_top_organismos(totales_organismo)
     escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
 
