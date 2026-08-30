@@ -242,3 +242,26 @@ def test_recortar_top_organismos_suma_a_un_otros_existente():
     assert recortado["09"]["OTROS"]["importe_total_eur"] == pytest.approx(500.0 + 6.0 + 0.5)
     assert recortado["09"]["OTROS"]["n_concesiones"] == 3 + 1 + 1
     assert len(recortado["09"]) == 15
+
+
+def test_recortar_top_organismos_exactamente_n_no_agrega_otros():
+    totales_organismo = {
+        "09": {f"Organismo {i}": {"importe_total_eur": float(15 - i), "n_concesiones": 1} for i in range(15)},
+    }
+
+    recortado = ingesta_bdns.recortar_top_organismos(totales_organismo, n=15)
+
+    assert len(recortado["09"]) == 15
+    assert "OTROS" not in recortado["09"]
+    assert recortado == totales_organismo
+
+
+def test_recortar_top_organismos_n_mas_uno_agrega_un_solo_organismo_a_otros():
+    totales_organismo = {
+        "09": {f"Organismo {i}": {"importe_total_eur": float(16 - i), "n_concesiones": 1} for i in range(16)},
+    }
+
+    recortado = ingesta_bdns.recortar_top_organismos(totales_organismo, n=15)
+
+    assert len(recortado["09"]) == 16  # 15 top + OTROS
+    assert recortado["09"]["OTROS"] == {"importe_total_eur": 1.0, "n_concesiones": 1}
