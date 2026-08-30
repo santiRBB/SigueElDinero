@@ -7,5 +7,8 @@ __pycache__/
 # Datos generados por la ingesta (regenerables via ingesta_aecid.py)
 salida_aecid/
 
+# Datos generados por la ingesta (regenerables via ingesta_bdns.py)
+salida_bdns/
+
 # Credenciales - nunca deben subirse
 .env

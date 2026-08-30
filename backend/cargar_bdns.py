@@ -66,6 +66,13 @@ def cargar():
                 fila["importe_total_eur"], fila["n_concesiones"],
             ))
 
+        meses = {(fila["anio"], fila["mes"]) for fila in filas}
+        if meses:
+            cur.execute(
+                "delete from fact_gasto_ccaa where (anio, mes) in %s",
+                (tuple(meses),),
+            )
+
         psycopg2.extras.execute_values(
             cur,
             """
