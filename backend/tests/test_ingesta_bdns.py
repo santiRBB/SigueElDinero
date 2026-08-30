@@ -78,22 +78,31 @@ def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
     monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
     paginas = [
         FakeResponsePagina(content=[
-            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 100.0},
-            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 50.0},
+            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento A", "importe": 100.0},
+            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento B", "importe": 50.0},
         ], last=False),
         FakeResponsePagina(content=[
-            {"nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "importe": 30.0},
+            {"nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "nivel3": "Cabildo de Tenerife", "importe": 30.0},
             {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
         ], last=True),
     ]
     client = FakeClientPaginado(paginas)
     raw_writer = io.StringIO()
 
-    totales, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, client, raw_writer)
+    totales, totales_organismo, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, client, raw_writer)
 
     assert totales == {
         "09": {"importe_total_eur": 150.0, "n_concesiones": 2},
         "05": {"importe_total_eur": 30.0, "n_concesiones": 1},
+    }
+    assert totales_organismo == {
+        "09": {
+            "Departamento A": {"importe_total_eur": 100.0, "n_concesiones": 1},
+            "Departamento B": {"importe_total_eur": 50.0, "n_concesiones": 1},
+        },
+        "05": {
+            "Cabildo de Tenerife": {"importe_total_eur": 30.0, "n_concesiones": 1},
+        },
     }
     assert len(sin_asignar) == 1
     assert sin_asignar[0]["nivel1"] == "ESTATAL"
@@ -117,10 +126,11 @@ def test_procesar_mes_reintenta_ante_fallo_de_red(monkeypatch):
             return FakeResponsePagina(content=[], last=True)
 
     raw_writer = io.StringIO()
-    totales, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, FlakyClient(), raw_writer)
+    totales, totales_organismo, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, FlakyClient(), raw_writer)
 
     assert intentos["n"] == 3
     assert totales == {}
+    assert totales_organismo == {}
     assert raw_writer.getvalue() == ""
     assert num_paginas == 1
 
@@ -140,9 +150,10 @@ def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
 
     totales_ccaa = {"09": {"importe_total_eur": 150.0, "n_concesiones": 2}}
+    totales_organismo = {"09": {"Departamento A": {"importe_total_eur": 100.0, "n_concesiones": 1}}}
     sin_asignar = [{"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0}]
 
-    ingesta_bdns.escribir_salidas(2026, 8, totales_ccaa, sin_asignar)
+    ingesta_bdns.escribir_salidas(2026, 8, totales_ccaa, totales_organismo, sin_asignar)
 
     agregado_path = tmp_path / "agregado_ccaa_2026-08.jsonl"
     with open(agregado_path, encoding="utf-8") as f:
@@ -150,6 +161,14 @@ def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
     assert fila == {
         "codigo_ine": "09", "anio": 2026, "mes": 8,
         "importe_total_eur": 150.0, "n_concesiones": 2,
+    }
+
+    organismo_path = tmp_path / "agregado_ccaa_organismo_2026-08.jsonl"
+    with open(organismo_path, encoding="utf-8") as f:
+        fila_org = json.loads(f.readline())
+    assert fila_org == {
+        "codigo_ine": "09", "anio": 2026, "mes": 8,
+        "organismo": "Departamento A", "importe_total_eur": 100.0, "n_concesiones": 1,
     }
 
     sin_asignar_path = tmp_path / "sin_ccaa_asignada_2026-08.jsonl"
@@ -174,8 +193,8 @@ def test_escribir_salidas_no_deja_archivo_final_si_falla_a_mitad(tmp_path, monke
 def test_escribir_salidas_reemplaza_un_archivo_previo_completo(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
 
-    ingesta_bdns.escribir_salidas(2026, 8, {"09": {"importe_total_eur": 100.0, "n_concesiones": 1}}, [])
-    ingesta_bdns.escribir_salidas(2026, 8, {"01": {"importe_total_eur": 200.0, "n_concesiones": 2}}, [])
+    ingesta_bdns.escribir_salidas(2026, 8, {"09": {"importe_total_eur": 100.0, "n_concesiones": 1}}, {}, [])
+    ingesta_bdns.escribir_salidas(2026, 8, {"01": {"importe_total_eur": 200.0, "n_concesiones": 2}}, {}, [])
 
     agregado_path = tmp_path / "agregado_ccaa_2026-08.jsonl"
     with open(agregado_path, encoding="utf-8") as f:
@@ -184,3 +203,42 @@ def test_escribir_salidas_reemplaza_un_archivo_previo_completo(tmp_path, monkeyp
         "codigo_ine": "01", "anio": 2026, "mes": 8,
         "importe_total_eur": 200.0, "n_concesiones": 2,
     }]
+
+
+def test_recortar_top_organismos_agrupa_el_resto_en_otros():
+    totales_organismo = {
+        "09": {f"Organismo {i}": {"importe_total_eur": float(20 - i), "n_concesiones": 1} for i in range(20)},
+    }
+
+    recortado = ingesta_bdns.recortar_top_organismos(totales_organismo, n=15)
+
+    assert len(recortado["09"]) == 16  # 15 + OTROS
+    assert "OTROS" in recortado["09"]
+    assert recortado["09"]["OTROS"]["n_concesiones"] == 5
+    assert recortado["09"]["OTROS"]["importe_total_eur"] == pytest.approx(5.0 + 4.0 + 3.0 + 2.0 + 1.0)
+
+
+def test_recortar_top_organismos_sin_recorte_si_hay_15_o_menos():
+    totales_organismo = {
+        "09": {"Organismo A": {"importe_total_eur": 100.0, "n_concesiones": 1}},
+    }
+
+    recortado = ingesta_bdns.recortar_top_organismos(totales_organismo, n=15)
+
+    assert recortado == totales_organismo
+    assert "OTROS" not in recortado["09"]
+
+
+def test_recortar_top_organismos_suma_a_un_otros_existente():
+    organismos = {f"Organismo {i}": {"importe_total_eur": float(20 - i), "n_concesiones": 1} for i in range(15)}
+    organismos["OTROS"] = {"importe_total_eur": 500.0, "n_concesiones": 3}
+    organismos["Organismo chico"] = {"importe_total_eur": 0.5, "n_concesiones": 1}
+    totales_organismo = {"09": organismos}
+
+    recortado = ingesta_bdns.recortar_top_organismos(totales_organismo, n=15)
+
+    # "OTROS" (500.0) entra en el top 15 por importe; Organismo 14 (6.0) y "Organismo chico" (0.5)
+    # son los que sobran y se suman al "OTROS" existente en vez de pisarlo.
+    assert recortado["09"]["OTROS"]["importe_total_eur"] == pytest.approx(500.0 + 6.0 + 0.5)
+    assert recortado["09"]["OTROS"]["n_concesiones"] == 3 + 1 + 1
+    assert len(recortado["09"]) == 15

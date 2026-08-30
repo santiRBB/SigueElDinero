@@ -11,6 +11,7 @@ Uso:
 Salidas (en ./salida_bdns/):
     raw/{YYYY-MM}.jsonl.gz                 -> concesiones crudas de ese mes, tal cual las devuelve la API
     agregado_ccaa_{YYYY-MM}.jsonl          -> una fila por CCAA con el total agregado de ese mes
+    agregado_ccaa_organismo_{YYYY-MM}.jsonl -> top 15 organismos por importe y CCAA (+ "OTROS")
     sin_ccaa_asignada_{YYYY-MM}.jsonl      -> concesiones ESTATAL, o LOCAL sin organismo reconocido
 
 Notas de diseno:
@@ -108,16 +109,17 @@ def _get_con_reintentos(client, url, params):
 
 
 def procesar_mes(anio, mes, client, raw_writer):
-    """Pagina /concesiones/busqueda para un mes completo, agrega por CCAA y devuelve
-    (totales_ccaa, sin_asignar, num_paginas). Cada fila se escribe a medida que llega en
-    raw_writer (cualquier objeto con .write(str) -> None, p.ej. un gzip.open(...) en modo
-    texto) -- no acumula las filas crudas en memoria. Quien llama controla el ciclo de vida
-    del archivo (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite detectar
-    en los logs una respuesta prematuramente truncada por la API."""
+    """Pagina /concesiones/busqueda para un mes completo, agrega por CCAA y por organismo dentro de
+    cada CCAA, y devuelve (totales_ccaa, totales_organismo, sin_asignar, num_paginas). Cada fila se
+    escribe a medida que llega en raw_writer (cualquier objeto con .write(str) -> None, p.ej. un
+    gzip.open(...) en modo texto) -- no acumula las filas crudas en memoria. Quien llama controla el
+    ciclo de vida del archivo (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite
+    detectar en los logs una respuesta prematuramente truncada por la API."""
     fecha_desde = f"01/{mes:02d}/{anio}"
     fecha_hasta = f"{ultimo_dia_mes(anio, mes):02d}/{mes:02d}/{anio}"
 
     totales_ccaa = {}
+    totales_organismo = {}
     sin_asignar = []
 
     page = 0
@@ -136,18 +138,52 @@ def procesar_mes(anio, mes, client, raw_writer):
             if codigo_ine is None:
                 sin_asignar.append(fila)
                 continue
+
+            importe = fila.get("importe") or 0.0
+
             acumulado = totales_ccaa.setdefault(
                 codigo_ine, {"importe_total_eur": 0.0, "n_concesiones": 0}
             )
-            acumulado["importe_total_eur"] += fila.get("importe") or 0.0
+            acumulado["importe_total_eur"] += importe
             acumulado["n_concesiones"] += 1
+
+            organismo = (fila.get("nivel3") or "").strip() or "SIN ORGANISMO"
+            org_dict = totales_organismo.setdefault(codigo_ine, {})
+            acumulado_org = org_dict.setdefault(
+                organismo, {"importe_total_eur": 0.0, "n_concesiones": 0}
+            )
+            acumulado_org["importe_total_eur"] += importe
+            acumulado_org["n_concesiones"] += 1
 
         if data.get("last", True) or not data["content"]:
             break
         page += 1
         time.sleep(PAUSA_ENTRE_PAGINAS)
 
-    return totales_ccaa, sin_asignar, num_paginas
+    return totales_ccaa, totales_organismo, sin_asignar, num_paginas
+
+
+TOP_ORGANISMOS_POR_MES = 15
+
+
+def recortar_top_organismos(totales_organismo, n=TOP_ORGANISMOS_POR_MES):
+    """Por CCAA, se queda con los n organismos de mayor importe y agrupa el resto en "OTROS" --
+    dentro de esa misma CCAA, nunca fuera de ella (el total de fact_gasto_ccaa/totales_ccaa no se
+    toca). Si "OTROS" ya es uno de los organismos reales de mayor importe, el sobrante se suma a esa
+    fila en vez de pisarla."""
+    resultado = {}
+    for codigo_ine, organismos in totales_organismo.items():
+        ordenados = sorted(organismos.items(), key=lambda kv: kv[1]["importe_total_eur"], reverse=True)
+        top = dict(ordenados[:n])
+        resto = ordenados[n:]
+        if resto:
+            existente = top.get("OTROS", {"importe_total_eur": 0.0, "n_concesiones": 0})
+            top["OTROS"] = {
+                "importe_total_eur": existente["importe_total_eur"] + sum(v["importe_total_eur"] for _, v in resto),
+                "n_concesiones": existente["n_concesiones"] + sum(v["n_concesiones"] for _, v in resto),
+            }
+        resultado[codigo_ine] = top
+    return resultado
 
 
 def _escribir_atomico(ruta, lineas):
@@ -171,7 +207,7 @@ def _escribir_atomico(ruta, lineas):
         raise
 
 
-def escribir_salidas(anio, mes, totales_ccaa, sin_asignar):
+def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sufijo = f"{anio}-{mes:02d}"
 
@@ -184,6 +220,20 @@ def escribir_salidas(anio, mes, totales_ccaa, sin_asignar):
                 "n_concesiones": totales["n_concesiones"],
             }, ensure_ascii=False)
             for codigo_ine, totales in totales_ccaa.items()
+        ),
+    )
+
+    _escribir_atomico(
+        OUTPUT_DIR / f"agregado_ccaa_organismo_{sufijo}.jsonl",
+        (
+            json.dumps({
+                "codigo_ine": codigo_ine, "anio": anio, "mes": mes,
+                "organismo": organismo,
+                "importe_total_eur": round(totales["importe_total_eur"], 2),
+                "n_concesiones": totales["n_concesiones"],
+            }, ensure_ascii=False)
+            for codigo_ine, organismos in totales_organismo.items()
+            for organismo, totales in organismos.items()
         ),
     )
 
@@ -204,8 +254,9 @@ def main():
     sufijo = f"{anio}-{mes:02d}"
     with httpx.Client(timeout=30) as client:
         with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", "wt", encoding="utf-8") as raw_writer:
-            totales_ccaa, sin_asignar, num_paginas = procesar_mes(anio, mes, client, raw_writer)
-    escribir_salidas(anio, mes, totales_ccaa, sin_asignar)
+            totales_ccaa, totales_organismo, sin_asignar, num_paginas = procesar_mes(anio, mes, client, raw_writer)
+    totales_organismo = recortar_top_organismos(totales_organismo)
+    escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
 
     total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
 
