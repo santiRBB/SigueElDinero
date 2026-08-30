@@ -1,3 +1,6 @@
+import gzip
+import json
+
 import pytest
 
 import ingesta_bdns
@@ -116,3 +119,35 @@ def test_procesar_mes_lanza_tras_agotar_reintentos(monkeypatch):
 
     with pytest.raises(RuntimeError):
         ingesta_bdns.procesar_mes(2026, 8, SiempreFalla())
+
+
+def test_escribir_salidas_crea_los_tres_archivos(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path / "raw")
+
+    totales_ccaa = {"09": {"importe_total_eur": 150.0, "n_concesiones": 2}}
+    sin_asignar = [{"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0}]
+    filas_raw = [
+        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 100.0},
+        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 50.0},
+        {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
+    ]
+
+    ingesta_bdns.escribir_salidas(2026, 8, totales_ccaa, sin_asignar, filas_raw)
+
+    raw_path = tmp_path / "raw" / "2026-08.jsonl.gz"
+    assert raw_path.exists()
+    with gzip.open(raw_path, "rt", encoding="utf-8") as f:
+        assert len(f.readlines()) == 3
+
+    agregado_path = tmp_path / "agregado_ccaa_2026-08.jsonl"
+    with open(agregado_path, encoding="utf-8") as f:
+        fila = json.loads(f.readline())
+    assert fila == {
+        "codigo_ine": "09", "anio": 2026, "mes": 8,
+        "importe_total_eur": 150.0, "n_concesiones": 2,
+    }
+
+    sin_asignar_path = tmp_path / "sin_ccaa_asignada_2026-08.jsonl"
+    with open(sin_asignar_path, encoding="utf-8") as f:
+        assert len(f.readlines()) == 1

@@ -141,3 +141,47 @@ def procesar_mes(anio, mes, client):
         time.sleep(PAUSA_ENTRE_PAGINAS)
 
     return totales_ccaa, sin_asignar, filas_raw
+
+
+def escribir_salidas(anio, mes, totales_ccaa, sin_asignar, filas_raw):
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    sufijo = f"{anio}-{mes:02d}"
+
+    with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", "wt", encoding="utf-8") as f:
+        for fila in filas_raw:
+            f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+
+    with open(OUTPUT_DIR / f"agregado_ccaa_{sufijo}.jsonl", "w", encoding="utf-8") as f:
+        for codigo_ine, totales in totales_ccaa.items():
+            f.write(json.dumps({
+                "codigo_ine": codigo_ine, "anio": anio, "mes": mes,
+                "importe_total_eur": round(totales["importe_total_eur"], 2),
+                "n_concesiones": totales["n_concesiones"],
+            }, ensure_ascii=False) + "\n")
+
+    with open(OUTPUT_DIR / f"sin_ccaa_asignada_{sufijo}.jsonl", "w", encoding="utf-8") as f:
+        for fila in sin_asignar:
+            f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mes", required=True, help="YYYY-MM")
+    args = parser.parse_args()
+    anio, mes = (int(x) for x in args.mes.split("-"))
+
+    log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
+    with httpx.Client(timeout=15) as client:
+        totales_ccaa, sin_asignar, filas_raw = procesar_mes(anio, mes, client)
+    escribir_salidas(anio, mes, totales_ccaa, sin_asignar, filas_raw)
+
+    log.info(
+        "Listo. Filas: %d | CCAA con datos: %d | Sin asignar: %d",
+        len(filas_raw), len(totales_ccaa), len(sin_asignar),
+    )
+    log.info("Salida en: %s", OUTPUT_DIR.resolve())
+
+
+if __name__ == "__main__":
+    main()
