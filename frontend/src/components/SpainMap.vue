@@ -9,7 +9,7 @@ import { feature } from 'topojson-client'
 import spainTopo from 'es-atlas/es/autonomous_regions.json'
 import type { CcaaResumen } from '../services/api'
 import { formatEUR } from '../utils/formato'
-import { RAMP, calcularCortes } from '../utils/mapaColores'
+import { COLOR_SIN_DATOS, calcularPieces } from '../utils/mapaColores'
 import MapLegend from './MapLegend.vue'
 
 echarts.use([MapChart, TooltipComponent, VisualMapComponent, CanvasRenderer])
@@ -42,17 +42,12 @@ const seriesData = computed(() =>
   props.ccaaResumen.map((c) => ({
     name: c.codigo_ine,
     nombre: c.nombre,
-    value: c.importe_total_eur,
+    value: c.importe_total_eur > 0 ? c.importe_total_eur : undefined,
     n: c.n_concesiones,
   }))
 )
 
-const pieces = computed(() => {
-  const valores = props.ccaaResumen.map((c) => c.importe_total_eur).filter((v) => v > 0)
-  const cortes = calcularCortes(valores)
-  const limites = [0, ...cortes, Infinity]
-  return RAMP.map((color, i) => ({ min: limites[i], max: limites[i + 1], color }))
-})
+const pieces = computed(() => calcularPieces(props.ccaaResumen.map((c) => c.importe_total_eur)))
 
 const option = computed(() => ({
   tooltip: {
@@ -76,7 +71,7 @@ const option = computed(() => ({
       map: 'spain',
       roam: true,
       nameProperty: 'name',
-      itemStyle: { areaColor: '#E6E1D7', borderColor: '#FAF7F0', borderWidth: 0.5 },
+      itemStyle: { areaColor: COLOR_SIN_DATOS, borderColor: '#FAF7F0', borderWidth: 0.5 },
       emphasis: { itemStyle: { areaColor: '#C9791C' } },
       data: seriesData.value,
     },

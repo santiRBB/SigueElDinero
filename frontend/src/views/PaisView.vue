@@ -82,17 +82,17 @@ function onSelectYear(anio: number) {
   <p v-if="store.detalleError" class="error">{{ store.detalleError }}</p>
   <p v-else-if="!store.detallePais" class="note">Cargando…</p>
 
+  <section v-if="iso3 === 'ESP'" class="block">
+    <h2 class="sec-title">Reparto entre comunidades autónomas</h2>
+    <SpainMap :ccaa-resumen="store.resumenCcaa" @ccaa-click="onCcaaClick" />
+  </section>
+
   <template v-if="store.detallePais">
     <section class="stats">
       <StatTile :valor="formatEURCompacto(totalPais)" etiqueta="Comprometido con este país" />
       <StatTile :valor="String(store.detallePais.proyectos.length)" etiqueta="Proyectos" />
       <StatTile :valor="formatPorcentaje(share)" etiqueta="Del total repartido" />
       <StatTile :valor="grupoPrincipal" etiqueta="Sector principal" />
-    </section>
-
-    <section v-if="iso3 === 'ESP'" class="block">
-      <h2 class="sec-title">Reparto entre comunidades autónomas</h2>
-      <SpainMap :ccaa-resumen="store.resumenCcaa" @ccaa-click="onCcaaClick" />
     </section>
 
     <section class="cols">

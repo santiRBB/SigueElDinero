@@ -10,7 +10,7 @@ import worldTopo from 'world-atlas/countries-110m.json'
 import isoMapping from '../assets/iso-numeric-to-alpha3.json'
 import type { PaisResumen } from '../services/api'
 import { formatEUR } from '../utils/formato'
-import { RAMP, calcularCortes } from '../utils/mapaColores'
+import { COLOR_SIN_DATOS, calcularPieces } from '../utils/mapaColores'
 import MapLegend from './MapLegend.vue'
 
 echarts.use([MapChart, TooltipComponent, VisualMapComponent, CanvasRenderer])
@@ -97,12 +97,7 @@ const seriesData = computed(() =>
   }))
 )
 
-const pieces = computed(() => {
-  const valores = props.paisesResumen.map((p) => p.importe_total_eur).filter((v) => v > 0)
-  const cortes = calcularCortes(valores)
-  const limites = [0, ...cortes, Infinity]
-  return RAMP.map((color, i) => ({ min: limites[i], max: limites[i + 1], color }))
-})
+const pieces = computed(() => calcularPieces(props.paisesResumen.map((p) => p.importe_total_eur)))
 
 const option = computed(() => ({
   tooltip: {
@@ -126,7 +121,7 @@ const option = computed(() => ({
       map: 'world',
       roam: true,
       nameProperty: 'name',
-      itemStyle: { areaColor: '#E6E1D7', borderColor: '#FAF7F0', borderWidth: 0.5 },
+      itemStyle: { areaColor: COLOR_SIN_DATOS, borderColor: '#FAF7F0', borderWidth: 0.5 },
       emphasis: { itemStyle: { areaColor: '#C9791C' } },
       data: seriesData.value,
     },

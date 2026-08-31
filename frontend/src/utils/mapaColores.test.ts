@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularCortes } from './mapaColores'
+import { RAMP, calcularCortes, calcularPieces } from './mapaColores'
 
 describe('calcularCortes', () => {
   it('returns fixed placeholder cuts when there are no values', () => {
@@ -26,5 +26,28 @@ describe('calcularCortes', () => {
     expect(result[2]).toBeCloseTo(36)
     expect(result[3]).toBeCloseTo(45)
     expect(result[4]).toBeCloseTo(53)
+  })
+})
+
+describe('calcularPieces', () => {
+  it('returns one piece per RAMP color, zipped against the computed cuts', () => {
+    const valores = [10, 20, 30, 40, 50, 60]
+    const cortes = calcularCortes(valores)
+
+    const pieces = calcularPieces(valores)
+
+    expect(pieces).toHaveLength(RAMP.length)
+    expect(pieces.map((p) => p.color)).toEqual(RAMP)
+    expect(pieces[0].min).toBe(0)
+    expect(pieces[0].max).toBeCloseTo(cortes[0])
+    expect(pieces[pieces.length - 1].min).toBeCloseTo(cortes[cortes.length - 1])
+    expect(pieces[pieces.length - 1].max).toBe(Infinity)
+  })
+
+  it('ignores non-positive values, treating them as absent rather than the lightest bucket', () => {
+    const withZeros = calcularPieces([0, 0, 10, 20, 30, 40, 50, 60])
+    const withoutZeros = calcularPieces([10, 20, 30, 40, 50, 60])
+
+    expect(withZeros).toEqual(withoutZeros)
   })
 })

@@ -176,9 +176,9 @@ export const useGastoStore = defineStore('gasto', {
         const data = await getResumenCcaa(this.filtroAnio ?? undefined)
         if (token !== resumenCcaaRequestToken) return
         this.resumenCcaa = data
-      } catch (e) {
+      } catch {
         if (token !== resumenCcaaRequestToken) return
-        this.error = (e as Error).message
+        this.resumenCcaa = []
       }
     },
     async seleccionarCcaa(codigoIne: string) {
@@ -198,6 +198,7 @@ export const useGastoStore = defineStore('gasto', {
     },
     async cargarCcaaPorAnio(codigoIne: string) {
       const token = ++ccaaPorAnioRequestToken
+      this.ccaaPorAnio = []
       try {
         const data = await getCcaaPorAnio(codigoIne)
         if (token !== ccaaPorAnioRequestToken) return

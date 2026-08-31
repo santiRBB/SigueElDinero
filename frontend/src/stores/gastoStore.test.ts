@@ -140,6 +140,18 @@ describe('gastoStore', () => {
     expect(store.resumenCcaa).toEqual(mockData)
   })
 
+  it('cargarResumenCcaa resets resumenCcaa on failure without touching the shared error field', async () => {
+    vi.mocked(api.getResumenCcaa).mockRejectedValue(new Error('Error 500 al llamar a /api/ccaa/resumen'))
+
+    const store = useGastoStore()
+    store.resumenCcaa = [{ codigo_ine: '09', nombre: 'Cataluña', importe_total_eur: 100, n_concesiones: 2 }]
+    store.error = null
+    await store.cargarResumenCcaa()
+
+    expect(store.resumenCcaa).toEqual([])
+    expect(store.error).toBeNull()
+  })
+
   it('seleccionarCcaa loads the detail for the given ccaa', async () => {
     const mockDetalle = {
       ccaa: { codigo_ine: '09', nombre: 'Cataluña' },
@@ -207,6 +219,23 @@ describe('gastoStore', () => {
 
     expect(api.getCcaaPorAnio).toHaveBeenCalledWith('09')
     expect(store.ccaaPorAnio).toEqual(datos)
+  })
+
+  it('cargarCcaaPorAnio clears stale data immediately so a previous ccaa never flashes under a new one', async () => {
+    const datosPrevios = [{ anio: 2024, importe_eur: 100, n_concesiones: 2 }]
+    const pending = deferred<typeof datosPrevios>()
+    vi.mocked(api.getCcaaPorAnio).mockReturnValue(pending.promise)
+
+    const store = useGastoStore()
+    store.ccaaPorAnio = datosPrevios
+
+    const call = store.cargarCcaaPorAnio('13')
+    expect(store.ccaaPorAnio).toEqual([])
+
+    pending.resolve([{ anio: 2024, importe_eur: 200, n_concesiones: 3 }])
+    await call
+
+    expect(store.ccaaPorAnio).toEqual([{ anio: 2024, importe_eur: 200, n_concesiones: 3 }])
   })
 
   it('setFiltroAnio updates the filter and re-fetches resumen and resumenPorGrupo', async () => {

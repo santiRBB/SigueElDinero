@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RAMP } from '../utils/mapaColores'
+import { COLOR_SIN_DATOS, RAMP } from '../utils/mapaColores'
 </script>
 
 <template>
@@ -7,7 +7,7 @@ import { RAMP } from '../utils/mapaColores'
     <span class="lg-label">Menos</span>
     <span v-for="color in RAMP" :key="color" class="lg-sw" :style="{ background: color }"></span>
     <span class="lg-label">Más</span>
-    <span class="lg-sw lg-none"></span>
+    <span class="lg-sw" :style="{ background: COLOR_SIN_DATOS }"></span>
     <span class="lg-label">Sin datos</span>
   </div>
 </template>
@@ -24,9 +24,6 @@ import { RAMP } from '../utils/mapaColores'
   width: 26px;
   height: 9px;
   display: inline-block;
-}
-.lg-none {
-  background: #e6e1d7;
 }
 .lg-label {
   font-size: 11px;
