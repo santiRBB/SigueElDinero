@@ -2,20 +2,38 @@ import { defineStore } from 'pinia'
 import {
   buscarProyectos as apiBuscarProyectos,
   getAnios,
+  getCcaaPorAnio,
+  getDetalleCcaa,
   getDetallePais,
   getPaisPorAnio,
+  getResumenCcaa,
   getResumenPaises,
   getResumenPorAnio,
   getResumenPorGrupo,
   getSectores,
 } from '../services/api'
-import type { AnioImporte, Grupo, GrupoImporte, Orden, PaisDetalle, PaisResumen, ProyectoBusqueda } from '../services/api'
+import type {
+  AnioImporte,
+  CcaaAnio,
+  CcaaDetalle,
+  CcaaResumen,
+  Grupo,
+  GrupoImporte,
+  Orden,
+  PaisDetalle,
+  PaisResumen,
+  ProyectoBusqueda,
+} from '../services/api'
 
 interface GastoState {
   paisesResumen: PaisResumen[]
   detallePais: PaisDetalle | null
   detalleError: string | null
   paisPorAnio: AnioImporte[]
+  resumenCcaa: CcaaResumen[]
+  detalleCcaa: CcaaDetalle | null
+  detalleCcaaError: string | null
+  ccaaPorAnio: CcaaAnio[]
   aniosDisponibles: number[]
   gruposDisponibles: Grupo[]
   filtroAnio: number | null
@@ -43,6 +61,9 @@ let detalleRequestToken = 0
 let porAnioRequestToken = 0
 let porGrupoRequestToken = 0
 let paisPorAnioRequestToken = 0
+let resumenCcaaRequestToken = 0
+let detalleCcaaRequestToken = 0
+let ccaaPorAnioRequestToken = 0
 let busquedaRequestToken = 0
 
 export const useGastoStore = defineStore('gasto', {
@@ -51,6 +72,10 @@ export const useGastoStore = defineStore('gasto', {
     detallePais: null,
     detalleError: null,
     paisPorAnio: [],
+    resumenCcaa: [],
+    detalleCcaa: null,
+    detalleCcaaError: null,
+    ccaaPorAnio: [],
     aniosDisponibles: [],
     gruposDisponibles: [],
     filtroAnio: null,
@@ -143,6 +168,43 @@ export const useGastoStore = defineStore('gasto', {
       } catch {
         if (token !== paisPorAnioRequestToken) return
         this.paisPorAnio = []
+      }
+    },
+    async cargarResumenCcaa() {
+      const token = ++resumenCcaaRequestToken
+      try {
+        const data = await getResumenCcaa(this.filtroAnio ?? undefined)
+        if (token !== resumenCcaaRequestToken) return
+        this.resumenCcaa = data
+      } catch (e) {
+        if (token !== resumenCcaaRequestToken) return
+        this.error = (e as Error).message
+      }
+    },
+    async seleccionarCcaa(codigoIne: string) {
+      const token = ++detalleCcaaRequestToken
+      this.detalleCcaa = null
+      this.detalleCcaaError = null
+      try {
+        const data = await getDetalleCcaa(codigoIne, this.filtroAnio ?? undefined)
+        if (token !== detalleCcaaRequestToken) return
+        this.detalleCcaa = data
+      } catch (e) {
+        if (token !== detalleCcaaRequestToken) return
+        const status = (e as { status?: number }).status
+        this.detalleCcaaError =
+          status === 404 ? 'Esta comunidad no tiene concesiones registradas.' : (e as Error).message
+      }
+    },
+    async cargarCcaaPorAnio(codigoIne: string) {
+      const token = ++ccaaPorAnioRequestToken
+      try {
+        const data = await getCcaaPorAnio(codigoIne)
+        if (token !== ccaaPorAnioRequestToken) return
+        this.ccaaPorAnio = data
+      } catch {
+        if (token !== ccaaPorAnioRequestToken) return
+        this.ccaaPorAnio = []
       }
     },
     async setFiltroAnio(anio: number | null) {

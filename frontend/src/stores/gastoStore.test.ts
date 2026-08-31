@@ -130,6 +130,85 @@ describe('gastoStore', () => {
     expect(store.paisPorAnio).toEqual(datos)
   })
 
+  it('cargarResumenCcaa stores the result', async () => {
+    const mockData = [{ codigo_ine: '09', nombre: 'Cataluña', importe_total_eur: 100, n_concesiones: 2 }]
+    vi.mocked(api.getResumenCcaa).mockResolvedValue(mockData)
+
+    const store = useGastoStore()
+    await store.cargarResumenCcaa()
+
+    expect(store.resumenCcaa).toEqual(mockData)
+  })
+
+  it('seleccionarCcaa loads the detail for the given ccaa', async () => {
+    const mockDetalle = {
+      ccaa: { codigo_ine: '09', nombre: 'Cataluña' },
+      importe_total_eur: 500,
+      n_concesiones: 3,
+      organismos: [],
+    }
+    vi.mocked(api.getDetalleCcaa).mockResolvedValue(mockDetalle)
+
+    const store = useGastoStore()
+    await store.seleccionarCcaa('09')
+
+    expect(api.getDetalleCcaa).toHaveBeenCalledWith('09', undefined)
+    expect(store.detalleCcaa).toEqual(mockDetalle)
+    expect(store.detalleCcaaError).toBeNull()
+  })
+
+  it('seleccionarCcaa shows a friendly message when the ccaa has no data (404)', async () => {
+    const notFound = Object.assign(new Error('Error 404 al llamar a /api/ccaa/99/detalle'), { status: 404 })
+    vi.mocked(api.getDetalleCcaa).mockRejectedValue(notFound)
+
+    const store = useGastoStore()
+    await store.seleccionarCcaa('99')
+
+    expect(store.detalleCcaa).toBeNull()
+    expect(store.detalleCcaaError).toBe('Esta comunidad no tiene concesiones registradas.')
+  })
+
+  it('seleccionarCcaa ignores a stale detalle response that resolves after a newer selection', async () => {
+    const detalleA = {
+      ccaa: { codigo_ine: '09', nombre: 'Cataluña' },
+      importe_total_eur: 500,
+      n_concesiones: 3,
+      organismos: [],
+    }
+    const detalleB = {
+      ccaa: { codigo_ine: '13', nombre: 'Comunidad de Madrid' },
+      importe_total_eur: 700,
+      n_concesiones: 5,
+      organismos: [],
+    }
+    const first = deferred<typeof detalleA>()
+    const second = deferred<typeof detalleB>()
+
+    vi.mocked(api.getDetalleCcaa).mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise)
+
+    const store = useGastoStore()
+    const call1 = store.seleccionarCcaa('09')
+    const call2 = store.seleccionarCcaa('13')
+
+    second.resolve(detalleB)
+    await call2
+    first.resolve(detalleA)
+    await call1
+
+    expect(store.detalleCcaa).toEqual(detalleB)
+  })
+
+  it('cargarCcaaPorAnio stores the yearly evolution for a ccaa', async () => {
+    const datos = [{ anio: 2024, importe_eur: 100, n_concesiones: 2 }]
+    vi.mocked(api.getCcaaPorAnio).mockResolvedValue(datos)
+
+    const store = useGastoStore()
+    await store.cargarCcaaPorAnio('09')
+
+    expect(api.getCcaaPorAnio).toHaveBeenCalledWith('09')
+    expect(store.ccaaPorAnio).toEqual(datos)
+  })
+
   it('setFiltroAnio updates the filter and re-fetches resumen and resumenPorGrupo', async () => {
     vi.mocked(api.getResumenPaises).mockResolvedValue([])
     vi.mocked(api.getResumenPorGrupo).mockResolvedValue([])
