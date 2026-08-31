@@ -45,6 +45,32 @@ export interface PaisDetalle {
   proyectos: Proyecto[]
 }
 
+export interface CcaaResumen {
+  codigo_ine: string
+  nombre: string
+  importe_total_eur: number
+  n_concesiones: number
+}
+
+export interface CcaaOrganismo {
+  organismo: string
+  importe_total_eur: number
+  n_concesiones: number
+}
+
+export interface CcaaDetalle {
+  ccaa: { codigo_ine: string; nombre: string }
+  importe_total_eur: number
+  n_concesiones: number
+  organismos: CcaaOrganismo[]
+}
+
+export interface CcaaAnio {
+  anio: number
+  importe_eur: number
+  n_concesiones: number
+}
+
 export interface Grupo {
   codigo_grupo: string
   nombre: string
@@ -88,6 +114,18 @@ export function getDetallePais(isoAlpha3: string, anio?: number): Promise<PaisDe
 
 export function getPaisPorAnio(isoAlpha3: string, grupo?: string): Promise<AnioImporte[]> {
   return getJSON<AnioImporte[]>(`/api/paises/${isoAlpha3}/por-anio`, { grupo })
+}
+
+export function getResumenCcaa(anio?: number): Promise<CcaaResumen[]> {
+  return getJSON<CcaaResumen[]>('/api/ccaa/resumen', { anio })
+}
+
+export function getDetalleCcaa(codigoIne: string, anio?: number): Promise<CcaaDetalle> {
+  return getJSON<CcaaDetalle>(`/api/ccaa/${codigoIne}/detalle`, { anio })
+}
+
+export function getCcaaPorAnio(codigoIne: string): Promise<CcaaAnio[]> {
+  return getJSON<CcaaAnio[]>(`/api/ccaa/${codigoIne}/por-anio`)
 }
 
 export function getAnios(): Promise<number[]> {

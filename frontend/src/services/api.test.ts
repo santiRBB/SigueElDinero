@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buscarProyectos,
   getAnios,
+  getCcaaPorAnio,
+  getDetalleCcaa,
   getDetallePais,
   getPaisPorAnio,
+  getResumenCcaa,
   getResumenPaises,
   getResumenPorAnio,
   getResumenPorGrupo,
@@ -110,5 +113,54 @@ describe('api service', () => {
     expect(calledUrl).toContain('pagina=2')
     expect(calledUrl).toContain('por_pagina=10')
     expect(result).toEqual(mockResultado)
+  })
+
+  it('getResumenCcaa includes anio as query param when provided', async () => {
+    const mockData = [{ codigo_ine: '09', nombre: 'Cataluña', importe_total_eur: 100, n_concesiones: 2 }]
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => mockData } as Response)
+
+    const result = await getResumenCcaa(2025)
+
+    const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
+    expect(calledUrl).toContain('/api/ccaa/resumen')
+    expect(calledUrl).toContain('anio=2025')
+    expect(result).toEqual(mockData)
+  })
+
+  it('getResumenCcaa omits anio when not provided', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => [] } as Response)
+
+    await getResumenCcaa()
+
+    const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
+    expect(calledUrl).not.toContain('anio=')
+  })
+
+  it('getDetalleCcaa requests the ccaa-specific path', async () => {
+    const mockDetalle = {
+      ccaa: { codigo_ine: '09', nombre: 'Cataluña' },
+      importe_total_eur: 500,
+      n_concesiones: 3,
+      organismos: [],
+    }
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => mockDetalle } as Response)
+
+    const result = await getDetalleCcaa('09', 2024)
+
+    const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
+    expect(calledUrl).toContain('/api/ccaa/09/detalle')
+    expect(calledUrl).toContain('anio=2024')
+    expect(result).toEqual(mockDetalle)
+  })
+
+  it('getCcaaPorAnio requests the evolution path', async () => {
+    const datos = [{ anio: 2024, importe_eur: 100, n_concesiones: 2 }]
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => datos } as Response)
+
+    const result = await getCcaaPorAnio('09')
+
+    const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
+    expect(calledUrl).toContain('/api/ccaa/09/por-anio')
+    expect(result).toEqual(datos)
   })
 })
