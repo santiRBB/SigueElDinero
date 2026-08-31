@@ -8,6 +8,7 @@ const router = createRouter({
     { path: '/mapa', name: 'mapa', component: () => import('../views/MapaView.vue') },
     { path: '/proyectos', name: 'proyectos', component: () => import('../views/ProyectosView.vue') },
     { path: '/paises/:iso3', name: 'pais', component: () => import('../views/PaisView.vue') },
+    { path: '/ccaa/:codigoIne', name: 'ccaa', component: () => import('../views/CcaaView.vue') },
     { path: '/sobre', name: 'sobre', component: () => import('../views/SobreView.vue') },
   ],
   scrollBehavior() {

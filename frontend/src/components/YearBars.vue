@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { AnioImporte } from '../services/api'
 import { formatEURCompacto } from '../utils/formato'
 
+export interface AnioValor {
+  anio: number
+  importe_eur: number
+}
+
 const props = defineProps<{
-  datos: AnioImporte[]
+  datos: AnioValor[]
   anioActivo: number | null
 }>()
 

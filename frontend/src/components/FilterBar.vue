@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { useGastoStore } from '../stores/gastoStore'
 
+defineProps<{
+  soloAnio?: boolean
+}>()
+
 const store = useGastoStore()
 
 function onAnioChange(event: Event) {
@@ -23,7 +27,7 @@ function onGrupoChange(event: Event) {
         <option v-for="anio in store.aniosDisponibles" :key="anio" :value="anio">{{ anio }}</option>
       </select>
     </label>
-    <label class="ctl">
+    <label v-if="!soloAnio" class="ctl">
       <span>Sector</span>
       <select :value="store.filtroGrupo ?? ''" @change="onGrupoChange">
         <option value="">Todos los sectores</option>
