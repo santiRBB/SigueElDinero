@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
 import type { Orden } from '../services/api'
 import { detectarImportesEstandar, ordenarProyectos } from '../utils/proyectos'
@@ -10,9 +10,11 @@ import StatTile from '../components/StatTile.vue'
 import BarList from '../components/BarList.vue'
 import FilterBar from '../components/FilterBar.vue'
 import SortSelect from '../components/SortSelect.vue'
+import SpainMap from '../components/SpainMap.vue'
 import { formatEURCompacto, formatPorcentaje } from '../utils/formato'
 
 const route = useRoute()
+const router = useRouter()
 const store = useGastoStore()
 
 const iso3 = computed(() => String(route.params.iso3).toUpperCase())
@@ -21,17 +23,30 @@ function cargarDetalle() {
   void store.seleccionarPais(iso3.value)
 }
 
+function cargarCcaaSiEspana() {
+  if (iso3.value === 'ESP') void store.cargarResumenCcaa()
+}
+
 onMounted(() => {
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
   if (!store.paisesResumen.length) void store.cargarResumen()
+  cargarCcaaSiEspana()
 })
 watch(iso3, () => {
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
+  cargarCcaaSiEspana()
 })
-watch(() => store.filtroAnio, cargarDetalle)
+watch(() => store.filtroAnio, () => {
+  cargarDetalle()
+  cargarCcaaSiEspana()
+})
 watch(() => store.filtroGrupo, () => void store.cargarPaisPorAnio(iso3.value))
+
+function onCcaaClick(codigoIne: string) {
+  router.push(`/ccaa/${codigoIne}`)
+}
 
 const importesEstandar = computed(() =>
   store.detallePais ? detectarImportesEstandar(store.detallePais.proyectos) : new Set<string>()
@@ -73,6 +88,11 @@ function onSelectYear(anio: number) {
       <StatTile :valor="String(store.detallePais.proyectos.length)" etiqueta="Proyectos" />
       <StatTile :valor="formatPorcentaje(share)" etiqueta="Del total repartido" />
       <StatTile :valor="grupoPrincipal" etiqueta="Sector principal" />
+    </section>
+
+    <section v-if="iso3 === 'ESP'" class="block">
+      <h2 class="sec-title">Reparto entre comunidades autónomas</h2>
+      <SpainMap :ccaa-resumen="store.resumenCcaa" @ccaa-click="onCcaaClick" />
     </section>
 
     <section class="cols">
