@@ -78,6 +78,17 @@ export interface Grupo {
   nombre: string
 }
 
+export interface AecidBdnsPais {
+  iso_alpha3: string
+  importe_eur: number
+  n_concesiones: number
+}
+
+export interface AecidBdnsResumen {
+  por_pais: AecidBdnsPais[]
+  sin_pais: { importe_eur: number; n_concesiones: number }
+}
+
 export type Orden = 'importe_desc' | 'importe_asc' | 'fecha_desc' | 'fecha_asc'
 
 export interface ResultadoBusqueda {
@@ -124,6 +135,10 @@ export function getResumenCcaa(anio?: number): Promise<CcaaResumen[]> {
 
 export function getDetalleCcaa(codigoIne: string, anio?: number): Promise<CcaaDetalle> {
   return getJSON<CcaaDetalle>(`/api/ccaa/${codigoIne}/detalle`, { anio })
+}
+
+export function getResumenAecidBdns(): Promise<AecidBdnsResumen> {
+  return getJSON<AecidBdnsResumen>('/api/aecid-bdns/resumen')
 }
 
 export function getCcaaPorAnio(codigoIne: string): Promise<CcaaAnio[]> {
