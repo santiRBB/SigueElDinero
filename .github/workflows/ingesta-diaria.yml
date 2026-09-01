@@ -74,6 +74,10 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: python cargar_aecid_bdns.py
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Publicar detalle crudo en GitHub Release
         working-directory: backend
         env:
