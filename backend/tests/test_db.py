@@ -536,3 +536,50 @@ def test_ccaa_por_anio_returns_yearly_totals(monkeypatch):
     assert len(cursor.executed) == 2
     _, params = cursor.executed[1]
     assert params == ["09"]
+
+
+def test_resumen_aecid_bdns_excluye_lo_ya_publicado_en_iati(monkeypatch):
+    rows = [
+        {"iso_alpha3": "CRI", "importe_eur": 261818.6, "n_concesiones": 1},
+    ]
+    cursor = FakeCursor(rows)
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.resumen_aecid_bdns()
+
+    assert result["por_pais"] == rows
+    sql, _ = cursor.executed[0]
+    assert "fact_gasto_aecid_bdns" in sql
+    assert "not exists" in sql.lower()
+    assert "numero_convocatoria" in sql
+    assert "url_bdns" in sql
+
+
+def test_resumen_aecid_bdns_separa_sin_pais(monkeypatch):
+    class DosConsultasCursor(FakeCursor):
+        def __init__(self):
+            super().__init__(rows=[])
+            self._responses = [
+                [{"iso_alpha3": "CRI", "importe_eur": 100.0, "n_concesiones": 1}],
+                [{"importe_eur": 50.0, "n_concesiones": 3}],
+            ]
+            self._call = 0
+
+        def fetchall(self):
+            rows = self._responses[self._call]
+            self._call += 1
+            return rows
+
+        def fetchone(self):
+            rows = self._responses[self._call]
+            return rows[0] if rows else None
+
+    cursor = DosConsultasCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.resumen_aecid_bdns()
+
+    assert result["por_pais"] == [{"iso_alpha3": "CRI", "importe_eur": 100.0, "n_concesiones": 1}]
+    assert result["sin_pais"] == {"importe_eur": 50.0, "n_concesiones": 3}

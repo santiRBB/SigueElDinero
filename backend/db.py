@@ -269,6 +269,46 @@ def sectores_disponibles() -> list[dict]:
     ]
 
 
+def resumen_aecid_bdns() -> dict:
+    """Concesiones de AECID vistas en BDNS que todavia no aparecen publicadas en IATI
+    (fact_gasto), agrupadas por pais cuando se pudo identificar uno sin ambiguedad. El
+    'not exists' es un dedup EXACTO, no una heuristica: el sufijo numerico de fact_gasto.url_bdns
+    es literalmente el campo numeroConvocatoria de BDNS (verificado en vivo contra la API de BDNS,
+    ver spec) -- si existe, esa concesion ya esta publicada y se excluye."""
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                select b.iso_alpha3,
+                       sum(b.importe_eur) as importe_eur,
+                       count(*) as n_concesiones
+                from fact_gasto_aecid_bdns b
+                where b.iso_alpha3 is not null
+                  and not exists (
+                      select 1 from fact_gasto f
+                      where f.url_bdns like '%/convocatorias/' || b.numero_convocatoria
+                  )
+                group by b.iso_alpha3
+                order by importe_eur desc
+            """)
+            por_pais = cur.fetchall()
+
+            cur.execute("""
+                select coalesce(sum(b.importe_eur), 0) as importe_eur,
+                       coalesce(count(*), 0) as n_concesiones
+                from fact_gasto_aecid_bdns b
+                where b.iso_alpha3 is null
+                  and not exists (
+                      select 1 from fact_gasto f
+                      where f.url_bdns like '%/convocatorias/' || b.numero_convocatoria
+                  )
+            """)
+            sin_pais = cur.fetchone()
+    finally:
+        conn.close()
+    return {"por_pais": por_pais, "sin_pais": sin_pais}
+
+
 def resumen_por_anio(grupo: str | None = None) -> list[dict]:
     sql = """
         select extract(year from f.start_date)::int as anio,
