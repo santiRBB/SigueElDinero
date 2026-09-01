@@ -60,7 +60,7 @@ def test_ccaa_resumen_without_query_params(monkeypatch):
 
 
 def test_detalle_returns_404_when_country_not_found(monkeypatch):
-    monkeypatch.setattr(main, "detalle_pais", lambda iso_alpha3, anio=None: None)
+    monkeypatch.setattr(main, "detalle_pais", lambda iso_alpha3, anio=None, grupo=None: None)
     client = TestClient(main.app)
 
     resp = client.get("/api/paises/ZZZ/detalle")
@@ -72,19 +72,20 @@ def test_detalle_returns_data_when_found(monkeypatch):
     fake = {"pais": {"iso_alpha3": "COL", "nombre": "Colombia", "region": None}, "categorias": [], "proyectos": []}
     called_with = {}
 
-    def fake_detalle(iso_alpha3, anio=None):
+    def fake_detalle(iso_alpha3, anio=None, grupo=None):
         called_with["iso_alpha3"] = iso_alpha3
         called_with["anio"] = anio
+        called_with["grupo"] = grupo
         return fake
 
     monkeypatch.setattr(main, "detalle_pais", fake_detalle)
     client = TestClient(main.app)
 
-    resp = client.get("/api/paises/col/detalle", params={"anio": 2024})
+    resp = client.get("/api/paises/col/detalle", params={"anio": 2024, "grupo": "720"})
 
     assert resp.status_code == 200
     assert resp.json() == fake
-    assert called_with == {"iso_alpha3": "COL", "anio": 2024}
+    assert called_with == {"iso_alpha3": "COL", "anio": 2024, "grupo": "720"}
 
 
 def test_pais_por_anio_returns_404_when_country_not_found(monkeypatch):

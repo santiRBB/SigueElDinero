@@ -72,7 +72,7 @@ describe('gastoStore', () => {
     const store = useGastoStore()
     await store.seleccionarPais('COL')
 
-    expect(api.getDetallePais).toHaveBeenCalledWith('COL', undefined)
+    expect(api.getDetallePais).toHaveBeenCalledWith('COL', undefined, undefined)
     expect(store.detallePais).toEqual(mockDetalle)
     expect(store.detalleError).toBeNull()
   })

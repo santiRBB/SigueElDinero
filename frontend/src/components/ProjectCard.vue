@@ -16,6 +16,7 @@ defineProps<{
     <div class="p-main">
       <h3>{{ proyecto.titulo ?? proyecto.aid }}</h3>
       <p class="p-org">{{ proyecto.organismo_ejecutor ?? 'Organismo no especificado' }}</p>
+      <p v-if="proyecto.sector_crs_nombre" class="p-sector">{{ proyecto.sector_crs_nombre }}</p>
     </div>
     <div class="p-meta">
       <span class="p-amt">{{ formatEUR(proyecto.importe_pais_eur) }}</span>
@@ -55,6 +56,12 @@ defineProps<{
   margin: 6px 0 0;
   font-size: 13px;
   color: var(--dim);
+}
+.p-sector {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+  font-style: italic;
 }
 .p-meta {
   display: flex;

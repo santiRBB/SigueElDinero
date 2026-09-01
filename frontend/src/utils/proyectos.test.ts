@@ -7,6 +7,8 @@ function proyecto(overrides: Partial<Proyecto>): Proyecto {
     aid: 'AID-1',
     titulo: 'Proyecto',
     organismo_ejecutor: 'ONG',
+    sector_crs_code: null,
+    sector_crs_nombre: null,
     importe_pais_eur: 1000,
     porcentaje_pais: 100,
     porcentaje_fuente: 'declared',

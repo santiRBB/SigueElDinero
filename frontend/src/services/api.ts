@@ -22,6 +22,8 @@ export interface Proyecto {
   aid: string
   titulo: string | null
   organismo_ejecutor: string | null
+  sector_crs_code: string | null
+  sector_crs_nombre: string | null
   importe_pais_eur: number
   porcentaje_pais: number | null
   porcentaje_fuente: 'declared' | 'assumed_equal_split' | null
@@ -108,8 +110,8 @@ export function getResumenPaises(anio?: number, grupo?: string): Promise<PaisRes
   return getJSON<PaisResumen[]>('/api/paises/resumen', { anio, grupo })
 }
 
-export function getDetallePais(isoAlpha3: string, anio?: number): Promise<PaisDetalle> {
-  return getJSON<PaisDetalle>(`/api/paises/${isoAlpha3}/detalle`, { anio })
+export function getDetallePais(isoAlpha3: string, anio?: number, grupo?: string): Promise<PaisDetalle> {
+  return getJSON<PaisDetalle>(`/api/paises/${isoAlpha3}/detalle`, { anio, grupo })
 }
 
 export function getPaisPorAnio(isoAlpha3: string, grupo?: string): Promise<AnioImporte[]> {

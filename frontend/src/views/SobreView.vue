@@ -20,6 +20,12 @@ onMounted(() => {
       Internacional para el Desarrollo (AECID) a través del estándar internacional IATI
       (International Aid Transparency Initiative). No son estimaciones ni datos de ejemplo.
     </p>
+    <p>
+      El mapa de comunidades autónomas en la ficha de España usa una fuente distinta: la Base de
+      Datos Nacional de Subvenciones (BDNS), que publica las concesiones de subvenciones públicas
+      dentro de España. Es un dato de cooperación doméstica, no de cooperación internacional, y por
+      eso no se suma al resto de totales por país de esta web.
+    </p>
     <h2>Unidad de medida</h2>
     <p>
       La unidad básica es la intervención: un importe comprometido, un país receptor, un sector CRS,

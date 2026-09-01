@@ -34,7 +34,18 @@ onMounted(() => {
     f.properties = { ...f.properties, name: String(f.id) }
   }
 
-  echarts.registerMap('spain', geoJson as unknown as Parameters<typeof echarts.registerMap>[1])
+  // Ceuta y Melilla ocupan ~0.03° en el geoJSON real, invisibles junto al resto de
+  // CCAA (el bounding box completo, con Canarias, cubre ~16° de latitud). specialAreas
+  // las reubica agrandadas en una zona de mar vacía, igual que hacen los mapas de China
+  // con Hong Kong/Macao.
+  echarts.registerMap(
+    'spain',
+    geoJson as unknown as Parameters<typeof echarts.registerMap>[1],
+    {
+      '18': { left: -6.3, top: 32.2, width: 1.1 },
+      '19': { left: -3.9, top: 32.2, width: 1.1 },
+    }
+  )
   mapaListo.value = true
 })
 

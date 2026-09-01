@@ -76,11 +76,54 @@ def test_detalle_pais_returns_none_when_country_not_found(monkeypatch):
     assert conn.closed is True
 
 
+def test_detalle_pais_applies_grupo_filter_to_categorias_and_proyectos(monkeypatch):
+    class MultiQueryCursor(FakeCursor):
+        def __init__(self):
+            super().__init__(rows=[])
+            self._responses = [
+                [{"iso_alpha3": "COL", "nombre": "Colombia", "region": "LatAm"}],
+                [],
+                [],
+            ]
+            self._call = 0
+
+        def fetchone(self):
+            rows = self._responses[self._call]
+            return rows[0] if rows else None
+
+        def fetchall(self):
+            rows = self._responses[self._call]
+            self._call += 1
+            return rows
+
+    cursor = MultiQueryCursor()
+    original_fetchone = cursor.fetchone
+
+    def fetchone_then_advance():
+        result = original_fetchone()
+        cursor._call += 1
+        return result
+
+    cursor.fetchone = fetchone_then_advance
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.detalle_pais("COL", anio=2024, grupo="720")
+
+    cat_sql, cat_params = cursor.executed[1]
+    proy_sql, proy_params = cursor.executed[2]
+    assert "substring(c.codigo_crs from 1 for 3) = %s" in cat_sql
+    assert cat_params == ["COL", 2024, "720"]
+    assert "substring(c.codigo_crs from 1 for 3) = %s" in proy_sql
+    assert proy_params == ["COL", 2024, "720"]
+
+
 def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
     pais_row = {"iso_alpha3": "COL", "nombre": "Colombia", "region": "LatAm"}
     categorias_rows = [{"codigo_grupo": "720", "importe_eur": 500.0, "n_intervenciones": 1}]
     proyectos_rows = [{
         "aid": "AID-1", "titulo": "Proyecto X", "organismo_ejecutor": "ONG Y",
+        "sector_crs_code": "72010", "sector_crs_nombre": "Material relief assistance and services",
         "importe_pais_eur": 500.0, "porcentaje_pais": 100.0, "porcentaje_fuente": "declared",
         "start_date": "2024-01-01", "end_date": None, "url_fuente": "https://datos.aecid.es/w/ejemplo",
         "url_bdns": "https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/867523",
@@ -127,6 +170,8 @@ def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
     proy_sql, _ = cursor.executed[2]
     assert "f.url_bdns" in proy_sql
     assert "f.bdns_tipo_convocatoria" in proy_sql
+    assert "c.codigo_crs as sector_crs_code" in proy_sql
+    assert "c.nombre as sector_crs_nombre" in proy_sql
     assert len(cursor.executed) == 3
     for _, params in cursor.executed[1:]:
         assert params[0] == "COL"
@@ -284,6 +329,8 @@ def test_buscar_proyectos_returns_total_and_resultados(monkeypatch):
     assert results_params[-2:] == [10, 10]
     assert "f.url_bdns" in results_sql
     assert "f.bdns_tipo_convocatoria" in results_sql
+    assert "c.codigo_crs as sector_crs_code" in results_sql
+    assert "c.nombre as sector_crs_nombre" in results_sql
 
 
 def test_buscar_proyectos_without_query_text(monkeypatch):

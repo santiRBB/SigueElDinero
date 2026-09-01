@@ -149,7 +149,7 @@ export const useGastoStore = defineStore('gasto', {
       this.detallePais = null
       this.detalleError = null
       try {
-        const data = await getDetallePais(iso3, this.filtroAnio ?? undefined)
+        const data = await getDetallePais(iso3, this.filtroAnio ?? undefined, this.filtroGrupo ?? undefined)
         if (token !== detalleRequestToken) return
         this.detallePais = data
       } catch (e) {

@@ -57,8 +57,8 @@ def get_ccaa_por_anio(codigo_ine: str):
 
 
 @app.get("/api/paises/{iso_alpha3}/detalle")
-def get_detalle(iso_alpha3: str, anio: int | None = None):
-    detalle = detalle_pais(iso_alpha3.upper(), anio=anio)
+def get_detalle(iso_alpha3: str, anio: int | None = None, grupo: str | None = None):
+    detalle = detalle_pais(iso_alpha3.upper(), anio=anio, grupo=grupo)
     if detalle is None:
         raise HTTPException(status_code=404, detail="Pais no encontrado")
     return detalle

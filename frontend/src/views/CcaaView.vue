@@ -18,6 +18,7 @@ function cargarDetalle() {
 }
 
 onMounted(() => {
+  if (!store.aniosDisponibles.length) void store.cargarFiltros()
   cargarDetalle()
   void store.cargarCcaaPorAnio(codigoIne.value)
 })

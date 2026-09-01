@@ -169,7 +169,7 @@ def ccaa_por_anio(codigo_ine: str) -> list[dict] | None:
         conn.close()
 
 
-def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
+def detalle_pais(iso_alpha3: str, anio: int | None = None, grupo: str | None = None) -> dict | None:
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -194,6 +194,9 @@ def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
             if anio is not None:
                 cat_sql += " and extract(year from f.start_date) = %s"
                 cat_params.append(anio)
+            if grupo is not None:
+                cat_sql += " and substring(c.codigo_crs from 1 for 3) = %s"
+                cat_params.append(grupo)
             cat_sql += " group by codigo_grupo order by importe_eur desc"
             cur.execute(cat_sql, cat_params)
             categorias = cur.fetchall()
@@ -202,17 +205,22 @@ def detalle_pais(iso_alpha3: str, anio: int | None = None) -> dict | None:
 
             proy_sql = """
                 select f.aid, f.titulo, o.nombre as organismo_ejecutor,
+                       c.codigo_crs as sector_crs_code, c.nombre as sector_crs_nombre,
                        f.importe_pais_eur, f.porcentaje_pais, f.porcentaje_fuente,
                        f.start_date, f.end_date, f.url_fuente, f.url_bdns, f.bdns_tipo_convocatoria
                 from fact_gasto f
                 join dim_pais p on p.pais_id = f.pais_id
                 left join dim_organismo o on o.organismo_id = f.organismo_id
+                left join dim_categoria c on c.categoria_id = f.categoria_id
                 where p.iso_alpha3 = %s
             """
             proy_params: list = [iso_alpha3]
             if anio is not None:
                 proy_sql += " and extract(year from f.start_date) = %s"
                 proy_params.append(anio)
+            if grupo is not None:
+                proy_sql += " and substring(c.codigo_crs from 1 for 3) = %s"
+                proy_params.append(grupo)
             proy_sql += " order by f.importe_pais_eur desc"
             cur.execute(proy_sql, proy_params)
             proyectos = cur.fetchall()
@@ -389,6 +397,7 @@ def buscar_proyectos(
                 select f.aid, f.titulo, o.nombre as organismo_ejecutor,
                        p.iso_alpha3 as pais_iso3, p.nombre as pais_nombre,
                        substring(c.codigo_crs from 1 for 3) as codigo_grupo,
+                       c.codigo_crs as sector_crs_code, c.nombre as sector_crs_nombre,
                        f.importe_pais_eur, f.porcentaje_pais, f.porcentaje_fuente,
                        f.start_date, f.end_date, f.url_fuente, f.url_bdns, f.bdns_tipo_convocatoria
                 {base_sql}

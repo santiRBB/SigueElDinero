@@ -28,6 +28,7 @@ function cargarCcaaSiEspana() {
 }
 
 onMounted(() => {
+  if (!store.aniosDisponibles.length) void store.cargarFiltros()
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
   if (!store.paisesResumen.length) void store.cargarResumen()
@@ -42,7 +43,10 @@ watch(() => store.filtroAnio, () => {
   cargarDetalle()
   cargarCcaaSiEspana()
 })
-watch(() => store.filtroGrupo, () => void store.cargarPaisPorAnio(iso3.value))
+watch(() => store.filtroGrupo, () => {
+  cargarDetalle()
+  void store.cargarPaisPorAnio(iso3.value)
+})
 
 function onCcaaClick(codigoIne: string) {
   router.push(`/ccaa/${codigoIne}`)
@@ -66,6 +70,8 @@ const grupoPrincipal = computed(() => {
 const filasGrupos = computed(() =>
   (store.detallePais?.categorias ?? []).map((c) => ({ etiqueta: c.nombre ?? c.codigo_grupo ?? 'Sin grupo', valor: c.importe_eur }))
 )
+const totalCcaa = computed(() => store.resumenCcaa.reduce((acc, c) => acc + c.importe_total_eur, 0))
+const concesionesCcaa = computed(() => store.resumenCcaa.reduce((acc, c) => acc + c.n_concesiones, 0))
 
 function onSelectYear(anio: number) {
   store.setFiltroAnio(store.filtroAnio === anio ? null : anio)
@@ -83,11 +89,21 @@ function onSelectYear(anio: number) {
   <p v-else-if="!store.detallePais" class="note">Cargando…</p>
 
   <section v-if="iso3 === 'ESP'" class="block">
-    <h2 class="sec-title">Reparto entre comunidades autónomas</h2>
+    <h2 class="sec-title">Subvenciones públicas por comunidad autónoma</h2>
+    <p class="note">
+      Dato distinto al de cooperación internacional de más abajo: viene de la Base de Datos Nacional
+      de Subvenciones (BDNS), no de AECID/IATI. Se filtra por año; el filtro de sector no aplica a
+      este dato, BDNS no clasifica sus concesiones por sector CRS.
+    </p>
+    <section class="stats">
+      <StatTile :valor="formatEURCompacto(totalCcaa)" etiqueta="Concedido en España (BDNS)" />
+      <StatTile :valor="String(concesionesCcaa)" etiqueta="Concesiones" />
+    </section>
     <SpainMap :ccaa-resumen="store.resumenCcaa" @ccaa-click="onCcaaClick" />
   </section>
 
   <template v-if="store.detallePais">
+    <h2 v-if="iso3 === 'ESP'" class="sec-title">Cooperación internacional gestionada desde España (AECID)</h2>
     <section class="stats">
       <StatTile :valor="formatEURCompacto(totalPais)" etiqueta="Comprometido con este país" />
       <StatTile :valor="String(store.detallePais.proyectos.length)" etiqueta="Proyectos" />
