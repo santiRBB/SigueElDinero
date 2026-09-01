@@ -10,6 +10,7 @@ from db import (
     detalle_ccaa,
     detalle_pais,
     pais_por_anio,
+    resumen_aecid_bdns,
     resumen_ccaa,
     resumen_paises,
     resumen_por_anio,
@@ -38,6 +39,11 @@ def get_resumen(anio: int | None = None, grupo: str | None = None):
 @app.get("/api/ccaa/resumen")
 def get_resumen_ccaa(anio: int | None = None):
     return resumen_ccaa(anio=anio)
+
+
+@app.get("/api/aecid-bdns/resumen")
+def get_resumen_aecid_bdns():
+    return resumen_aecid_bdns()
 
 
 @app.get("/api/ccaa/{codigo_ine}/detalle")
