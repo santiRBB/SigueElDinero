@@ -70,7 +70,27 @@
     "VALENCIA": "10",
     "OVIEDO": "03",
     "VALLADOLID": "07",
-    "GUADALAJARA": "08"
+    "GUADALAJARA": "08",
+    "VIC": "09",
+    "ALMUNECAR": "01",
+    "TORREVIEJA": "10",
+    "PALENCIA": "07",
+    "SAN VICENTE DEL RASPEIG/SANT VICENT DEL RASPEIG": "10",
+    "CORUNA, A": "12",
+    "MARINA DE CUDEYO": "06",
+    "BENIDORM": "10",
+    "CADIZ": "01",
+    "MONTELLANO": "01",
+    "CALVIA": "04",
+    "OROTAVA, LA": "05",
+    "CASTELLON DE LA PLANA/CASTELLO DE LA PLANA": "10",
+    "HUERCAL DE ALMERIA": "01",
+    "ALHAMA DE MURCIA": "14",
+    "ASCO": "09",
+    "VALDEPENAS": "08",
+    "TARRAGONA": "09",
+    "TALAVERA DE LA REINA": "08",
+    "JACA": "02"
   },
   "local_patron": {
     "consejo insular": {

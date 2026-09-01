@@ -236,9 +236,14 @@ def anios_disponibles() -> list[int]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select distinct extract(year from start_date)::int as anio
-                from fact_gasto
-                where start_date is not null
+                select anio from (
+                    select distinct extract(year from start_date)::int as anio
+                    from fact_gasto
+                    where start_date is not null
+                    union
+                    select distinct anio
+                    from fact_gasto_ccaa
+                ) t
                 order by anio
                 """
             )

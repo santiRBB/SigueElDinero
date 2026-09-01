@@ -179,11 +179,14 @@ def test_detalle_pais_returns_pais_categorias_and_proyectos(monkeypatch):
 
 
 def test_anios_disponibles(monkeypatch):
-    cursor = FakeCursor(rows=[(2023,), (2024,), (2025,)])
+    cursor = FakeCursor(rows=[(2022,), (2023,), (2024,), (2025,)])
     conn = FakeConnection(cursor)
     monkeypatch.setattr(db, "get_connection", lambda: conn)
 
-    assert db.anios_disponibles() == [2023, 2024, 2025]
+    assert db.anios_disponibles() == [2022, 2023, 2024, 2025]
+    sql, _ = cursor.executed[0]
+    assert "fact_gasto_ccaa" in sql
+    assert "fact_gasto" in sql
 
 
 def test_sectores_disponibles(monkeypatch):
