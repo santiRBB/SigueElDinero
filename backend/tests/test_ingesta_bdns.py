@@ -252,6 +252,32 @@ def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
         assert len(f.readlines()) == 1
 
 
+def test_escribir_salidas_crea_el_archivo_agregado_aecid(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    concesiones_aecid = [{
+        "id": 156033296, "nivel1": "ESTADO",
+        "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
+        "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA. GRANDES BOSQUES 2026 (FUNDECOR)",
+        "numeroConvocatoria": "914029", "importe": 56501.4, "fechaConcesion": "2026-07-21",
+    }]
+
+    ingesta_bdns.escribir_salidas(2026, 8, {}, {}, [], concesiones_aecid)
+
+    aecid_path = tmp_path / "agregado_aecid_2026-08.jsonl"
+    with open(aecid_path, encoding="utf-8") as f:
+        filas = [json.loads(linea) for linea in f]
+    assert filas == [{
+        "concesion_id": 156033296,
+        "numero_convocatoria": "914029",
+        "iso_alpha3": "CRI",
+        "beneficiario": "FUNDECOR",
+        "titulo": "COSTA RICA. GRANDES BOSQUES 2026 (FUNDECOR)",
+        "importe_eur": 56501.4,
+        "fecha_concesion": "2026-07-21",
+    }]
+
+
 def test_escribir_salidas_no_deja_archivo_final_si_falla_a_mitad(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
 
