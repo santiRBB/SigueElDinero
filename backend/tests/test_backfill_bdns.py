@@ -90,12 +90,26 @@ def test_ejecutar_mes_pasa_continuar_solo_a_partir_del_segundo_intento(monkeypat
     assert "--continuar" in llamadas[2]
 
 
+def test_ejecutar_mes_pasa_continuar_desde_el_primer_intento_si_se_pide(monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(
+        backfill_bdns.subprocess, "run",
+        lambda cmd, cwd: (llamadas.append(cmd), ResultadoFake(0))[1],
+    )
+
+    assert backfill_bdns.ejecutar_mes("2026-08", continuar_desde_el_inicio=True) is True
+    assert "--continuar" in llamadas[0]
+
+
 def test_ejecutar_backfill_salta_meses_ya_procesados(tmp_path, monkeypatch):
     monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
     (tmp_path / "agregado_ccaa_2023-01.jsonl").write_text("")
 
     llamados = []
-    monkeypatch.setattr(backfill_bdns, "ejecutar_mes", lambda sufijo: (llamados.append(sufijo), True)[1])
+    monkeypatch.setattr(
+        backfill_bdns, "ejecutar_mes",
+        lambda sufijo, continuar_desde_el_inicio=False: (llamados.append(sufijo), True)[1],
+    )
 
     backfill_bdns.ejecutar_backfill((2023, 1), (2023, 2), forzar=False)
 
@@ -107,7 +121,10 @@ def test_ejecutar_backfill_reprocesa_con_forzar(tmp_path, monkeypatch):
     (tmp_path / "agregado_ccaa_2023-01.jsonl").write_text("")
 
     llamados = []
-    monkeypatch.setattr(backfill_bdns, "ejecutar_mes", lambda sufijo: (llamados.append(sufijo), True)[1])
+    monkeypatch.setattr(
+        backfill_bdns, "ejecutar_mes",
+        lambda sufijo, continuar_desde_el_inicio=False: (llamados.append(sufijo), True)[1],
+    )
 
     backfill_bdns.ejecutar_backfill((2023, 1), (2023, 1), forzar=True)
 
@@ -119,7 +136,7 @@ def test_ejecutar_backfill_se_detiene_en_el_primer_mes_que_falla(tmp_path, monke
 
     llamados = []
 
-    def fake_ejecutar_mes(sufijo):
+    def fake_ejecutar_mes(sufijo, continuar_desde_el_inicio=False):
         llamados.append(sufijo)
         return sufijo != "2023-02"
 
@@ -135,6 +152,40 @@ def _crear_raw(output_dir, sufijo):
     raw_dir = output_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     (raw_dir / f"{sufijo}.jsonl.gz").write_bytes(b"")
+
+
+def test_ejecutar_backfill_aprovecha_raw_previo_desde_el_primer_intento(tmp_path, monkeypatch):
+    monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
+    _crear_raw(tmp_path, "2023-01")  # quedo de una corrida anterior, pero sin agregado_ccaa (fallo)
+
+    llamados = []
+    monkeypatch.setattr(
+        backfill_bdns, "ejecutar_mes",
+        lambda sufijo, continuar_desde_el_inicio=False: (
+            llamados.append((sufijo, continuar_desde_el_inicio)), True,
+        )[1],
+    )
+
+    backfill_bdns.ejecutar_backfill((2023, 1), (2023, 1), forzar=False)
+
+    assert llamados == [("2023-01", True)]
+
+
+def test_ejecutar_backfill_forzar_ignora_raw_previo(tmp_path, monkeypatch):
+    monkeypatch.setattr(backfill_bdns, "OUTPUT_DIR", tmp_path)
+    _crear_raw(tmp_path, "2023-01")
+
+    llamados = []
+    monkeypatch.setattr(
+        backfill_bdns, "ejecutar_mes",
+        lambda sufijo, continuar_desde_el_inicio=False: (
+            llamados.append((sufijo, continuar_desde_el_inicio)), True,
+        )[1],
+    )
+
+    backfill_bdns.ejecutar_backfill((2023, 1), (2023, 1), forzar=True)
+
+    assert llamados == [("2023-01", False)]
 
 
 def test_ejecutar_relleno_organismo_salta_mes_sin_raw_local(tmp_path, monkeypatch):

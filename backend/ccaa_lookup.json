@@ -51,9 +51,31 @@
     "DENIA": "10",
     "QUART DE POBLET": "10",
     "PONFERRADA": "07",
-    "PERAFORT": "09"
+    "PERAFORT": "09",
+    "ALGEMESI": "10",
+    "SANT CELONI": "09",
+    "CERDANYOLA DEL VALLES": "09",
+    "TORRENT": "10",
+    "PRAT DE LLOBREGAT, EL": "09",
+    "BILBAO": "16",
+    "BADIA DEL VALLES": "09",
+    "ZAMORA": "07",
+    "BASAURI": "16",
+    "FUENLABRADA": "13",
+    "REUS": "09",
+    "ROZAS DE MADRID, LAS": "13",
+    "ALICANTE/ALACANT": "10",
+    "MOLINA DE SEGURA": "14",
+    "ALCOY/ALCOI": "10",
+    "VALENCIA": "10",
+    "OVIEDO": "03",
+    "VALLADOLID": "07",
+    "GUADALAJARA": "08"
   },
   "local_patron": {
+    "consejo insular": {
+      "MALLORCA": "04", "MENORCA": "04", "EIVISSA": "04", "IBIZA": "04", "FORMENTERA": "04"
+    },
     "diputacion": {
       "AVILA": "07", "BURGOS": "07", "LEON": "07", "PALENCIA": "07", "SALAMANCA": "07",
       "SEGOVIA": "07", "SORIA": "07", "VALLADOLID": "07", "ZAMORA": "07",

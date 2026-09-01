@@ -15,12 +15,17 @@ tienen agregado_ccaa_{YYYY-MM}.jsonl se saltan salvo --forzar.
 
 Un mes que falla (timeout de red, error HTTP tras agotar los reintentos internos de ingesta_bdns.py,
 etc.) se reintenta hasta REINTENTOS_MES veces, con una pausa entre intentos -- un fallo transitorio
-en la pagina 500 de 900 no te obliga a estar reiniciando el backfill a mano. El primer intento de
-cada mes siempre arranca de pagina 0; del segundo intento en adelante se pasa --continuar a
-ingesta_bdns.py, que retoma desde el raw parcial que dejo el intento anterior (esas paginas ya
-quedaron completas e integras en disco) en vez de volver a pedirlas todas. Solo si un mes se sigue
-cayendo tras agotar esos reintentos se detiene todo el backfill (en vez de seguir con datos
-parciales silenciosos); volver a correr el script retoma justo desde ese mes.
+en la pagina 500 de 900 no te obliga a estar reiniciando el backfill a mano. Del segundo intento en
+adelante (dentro de la misma corrida) se pasa --continuar a ingesta_bdns.py, que retoma desde el raw
+parcial que dejo el intento anterior (esas paginas ya quedaron completas e integras en disco) en vez
+de volver a pedirlas todas. Solo si un mes se sigue cayendo tras agotar esos reintentos se detiene
+todo el backfill (en vez de seguir con datos parciales silenciosos); volver a correr el script
+retoma justo desde ese mes.
+
+Si volves a correr el script (una sesion nueva, no un reintento dentro de la misma) y un mes ya
+tiene un raw parcial de una corrida anterior (p.ej. porque quedo interrumpido), tambien se usa
+--continuar desde el primer intento -- no hace falta perder esas paginas. --forzar ignora esto
+adrede: pide explicitamente un reproceso limpio de cero.
 
 --rellenar-organismo:
     agregado_ccaa_organismo_{YYYY-MM}.jsonl se agrego despues de que ya existiera este backfill, asi
@@ -61,15 +66,17 @@ def generar_meses(desde, hasta):
             anio += 1
 
 
-def ejecutar_mes(sufijo):
-    """Corre ingesta_bdns.py para un mes, reintentando ante un fallo. El primer intento siempre
-    arranca de cero (mismo comportamiento e idempotencia de siempre); del segundo intento en
-    adelante se pasa --continuar, para retomar desde el raw parcial que haya quedado del intento
-    anterior en vez de volver a pedir todas las paginas ya bajadas. Devuelve True si termino con
-    exito, False si se agotaron los reintentos."""
+def ejecutar_mes(sufijo, continuar_desde_el_inicio=False):
+    """Corre ingesta_bdns.py para un mes, reintentando ante un fallo. Del segundo intento en
+    adelante siempre se pasa --continuar (para retomar el raw parcial que haya dejado el intento
+    anterior dentro de esta misma corrida). El primer intento pasa --continuar tambien si
+    continuar_desde_el_inicio es True -- pensado para cuando ya hay un raw parcial en disco de una
+    corrida ANTERIOR (de una sesion previa de este mismo script, no de este intento) que vale la
+    pena aprovechar en vez de tirarlo; ver ejecutar_backfill. Devuelve True si termino con exito,
+    False si se agotaron los reintentos."""
     for intento in range(1, REINTENTOS_MES + 1):
         cmd = [sys.executable, "ingesta_bdns.py", "--mes", sufijo]
-        if intento > 1:
+        if intento > 1 or continuar_desde_el_inicio:
             cmd.append("--continuar")
         resultado = subprocess.run(cmd, cwd=BACKEND_DIR)
         if resultado.returncode == 0:
@@ -93,8 +100,13 @@ def ejecutar_backfill(desde, hasta, forzar):
             print(f"[{sufijo}] ya procesado, salteando (usa --forzar para reprocesar)")
             continue
 
+        # Si ya hay un raw de una corrida anterior de este mismo mes (p.ej. quedo a medias en una
+        # sesion previa), aprovecharlo desde el primer intento en vez de tirarlo -- --forzar
+        # explicitamente pide un reproceso limpio, asi que ahi se ignora.
+        raw_previo = (OUTPUT_DIR / "raw" / f"{sufijo}.jsonl.gz").exists() and not forzar
+
         print(f"[{sufijo}] procesando...")
-        if not ejecutar_mes(sufijo):
+        if not ejecutar_mes(sufijo, continuar_desde_el_inicio=raw_previo):
             print(f"Backfill detenido. Volve a correr este script para retomar desde {sufijo}.")
             sys.exit(1)
 

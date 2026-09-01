@@ -27,6 +27,7 @@ Notas de diseno:
 
 import argparse
 import calendar
+import contextlib
 import gzip
 import json
 import logging
@@ -278,6 +279,36 @@ def _ruta_marcador_completo(sufijo):
     return RAW_DIR / f"{sufijo}.completo"
 
 
+def _ruta_lock(sufijo):
+    return RAW_DIR / f"{sufijo}.lock"
+
+
+@contextlib.contextmanager
+def _lock_mes(sufijo):
+    """Evita que dos corridas (--continuar, --desde-raw, o ambas, de este script o via
+    backfill_bdns.py) toquen el raw de un mismo mes al mismo tiempo: dos procesos leyendo/escribiendo
+    el mismo raw/{sufijo}.jsonl.gz en paralelo corrompen la lectura del gzip a medio escribir y
+    hacen perder todo el progreso ya bajado de ese mes. Si el lock ya existe asumimos que hay otra
+    corrida activa y abortamos de una; si en realidad quedo huerfano por un kill duro del proceso
+    anterior, hay que borrarlo a mano antes de reintentar."""
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = _ruta_lock(sufijo)
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise SystemExit(
+            f"Ya hay otra corrida en curso para {sufijo} (existe {lock_path}). Si estas seguro de "
+            f"que no es asi -- quedo huerfano por un proceso cortado a la fuerza -- borralo a mano "
+            f"y volve a correr."
+        )
+    with os.fdopen(fd, "w") as f:
+        f.write(str(os.getpid()))
+    try:
+        yield
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+
 def reprocesar_desde_raw(anio, mes):
     """Reconstruye las salidas agregadas (agregado_ccaa, agregado_ccaa_organismo,
     sin_ccaa_asignada) de un mes a partir de su raw/{YYYY-MM}.jsonl.gz ya descargado, sin volver a
@@ -389,53 +420,54 @@ def main():
     )
     args = parser.parse_args()
     anio, mes = (int(x) for x in args.mes.split("-"))
-
-    if args.desde_raw:
-        reprocesar_desde_raw(anio, mes)
-        return
-
-    log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
     sufijo = f"{anio}-{mes:02d}"
 
-    totales_ccaa, totales_organismo, sin_asignar, pagina_inicial = (
-        _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], 0)
-    )
-    modo_apertura = "at" if pagina_inicial else "wt"
-    marcador_completo = _ruta_marcador_completo(sufijo)
-    if modo_apertura == "wt":
-        # Arranque fresco (sin --continuar, o --continuar sin nada que retomar): invalidar
-        # cualquier marcador de una corrida completa anterior antes de truncar el raw, para que un
-        # fallo a mitad de este nuevo intento no deje un marcador "completo" apuntando a un raw
-        # que ahora esta truncado.
-        marcador_completo.unlink(missing_ok=True)
+    with _lock_mes(sufijo):
+        if args.desde_raw:
+            reprocesar_desde_raw(anio, mes)
+            return
 
-    with httpx.Client(timeout=30) as client:
-        with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", modo_apertura, encoding="utf-8") as raw_writer:
-            totales_ccaa, totales_organismo, sin_asignar, num_paginas = procesar_mes(
-                anio, mes, client, raw_writer,
-                totales_ccaa=totales_ccaa, totales_organismo=totales_organismo,
-                sin_asignar=sin_asignar, pagina_inicial=pagina_inicial,
-            )
-    marcador_completo.touch()
-    totales_organismo = recortar_top_organismos(totales_organismo)
-    escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
+        log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
+        RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-    total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
+        totales_ccaa, totales_organismo, sin_asignar, pagina_inicial = (
+            _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], 0)
+        )
+        modo_apertura = "at" if pagina_inicial else "wt"
+        marcador_completo = _ruta_marcador_completo(sufijo)
+        if modo_apertura == "wt":
+            # Arranque fresco (sin --continuar, o --continuar sin nada que retomar): invalidar
+            # cualquier marcador de una corrida completa anterior antes de truncar el raw, para que un
+            # fallo a mitad de este nuevo intento no deje un marcador "completo" apuntando a un raw
+            # que ahora esta truncado.
+            marcador_completo.unlink(missing_ok=True)
 
-    log.info(
-        "Listo. Filas: %d | CCAA con datos: %d | Sin asignar: %d",
-        total_filas, len(totales_ccaa), len(sin_asignar),
-    )
-    log.info("Paginas procesadas: %d", num_paginas)
-    log.info("Total de filas procesadas este mes: %d", total_filas)
-    log.info("Salida en: %s", OUTPUT_DIR.resolve())
+        with httpx.Client(timeout=30) as client:
+            with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", modo_apertura, encoding="utf-8") as raw_writer:
+                totales_ccaa, totales_organismo, sin_asignar, num_paginas = procesar_mes(
+                    anio, mes, client, raw_writer,
+                    totales_ccaa=totales_ccaa, totales_organismo=totales_organismo,
+                    sin_asignar=sin_asignar, pagina_inicial=pagina_inicial,
+                )
+        marcador_completo.touch()
+        totales_organismo = recortar_top_organismos(totales_organismo)
+        escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
 
-    no_asignados_local = Counter(
-        normalizar(fila.get("nivel2")) for fila in sin_asignar if fila.get("nivel1") == "LOCAL"
-    )
-    for nombre, n in no_asignados_local.most_common(20):
-        log.info("Sin asignar (LOCAL): %s (%d)", nombre, n)
+        total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
+
+        log.info(
+            "Listo. Filas: %d | CCAA con datos: %d | Sin asignar: %d",
+            total_filas, len(totales_ccaa), len(sin_asignar),
+        )
+        log.info("Paginas procesadas: %d", num_paginas)
+        log.info("Total de filas procesadas este mes: %d", total_filas)
+        log.info("Salida en: %s", OUTPUT_DIR.resolve())
+
+        no_asignados_local = Counter(
+            normalizar(fila.get("nivel2")) for fila in sin_asignar if fila.get("nivel1") == "LOCAL"
+        )
+        for nombre, n in no_asignados_local.most_common(20):
+            log.info("Sin asignar (LOCAL): %s (%d)", nombre, n)
 
 
 if __name__ == "__main__":

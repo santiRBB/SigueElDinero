@@ -45,12 +45,6 @@ onMounted(() => {
       registrados aparecen en gris en el mapa — no significa que no reciban cooperación española,
       solo que no hay actividades AECID cargadas para ese país con los filtros actuales.
     </p>
-    <h2>Qué falta todavía</h2>
-    <p>
-      Esta primera fase cubre solo la cooperación internacional. El gasto interno en España (fondos
-      públicos por comunidad autónoma, vía BDNS/IGAE) está planificado como una fase 2 independiente,
-      con su propio mapa de comunidades autónomas.
-    </p>
     <h2>Geografía</h2>
     <p>
       Las fronteras del mapa proceden de <em>world-atlas</em> (Natural Earth, dominio público), a
