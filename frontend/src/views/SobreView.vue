@@ -26,6 +26,16 @@ onMounted(() => {
       dentro de España. Es un dato de cooperación doméstica, no de cooperación internacional, y por
       eso no se suma al resto de totales por país de esta web.
     </p>
+    <p>
+      Además, algunas cifras de países muestran una línea "preliminares confirmados por AECID vía
+      BDNS": son concesiones que AECID ya registró en la Base de Datos Nacional de Subvenciones,
+      pero que todavía no publicó como actividad en IATI (se verificó un desfase real de varios
+      meses entre ambas). Se muestran aparte de "Comprometido con este país" porque BDNS no declara
+      cómo se reparte un importe entre varios países cuando un proyecto cubre más de uno — a
+      diferencia de IATI, que sí lo hace explícitamente. El país solo se identifica cuando el texto
+      de la convocatoria lo menciona sin ambigüedad; si no, el importe se cuenta igual pero sin
+      asignarlo a ningún país.
+    </p>
     <h2>Unidad de medida</h2>
     <p>
       La unidad básica es la intervención: un importe comprometido, un país receptor, un sector CRS,
