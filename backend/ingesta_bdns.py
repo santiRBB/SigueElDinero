@@ -32,6 +32,7 @@ import gzip
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 import unicodedata
@@ -54,6 +55,14 @@ RAW_DIR = OUTPUT_DIR / "raw"
 CCAA_LOOKUP_PATH = Path(__file__).parent / "ccaa_lookup.json"
 with open(CCAA_LOOKUP_PATH, "r", encoding="utf-8") as f:
     CCAA_LOOKUP = json.load(f)
+
+PAIS_LOOKUP_PATH = Path(__file__).parent / "pais_lookup.json"
+with open(PAIS_LOOKUP_PATH, "r", encoding="utf-8") as f:
+    PAIS_LOOKUP = json.load(f)
+
+_PAIS_LOOKUP_POR_LARGO = sorted(PAIS_LOOKUP.items(), key=lambda kv: len(kv[0]), reverse=True)
+
+NIVEL3_AECID = "AGENCIA ESTATAL AGENCIA ESPAÑOLA DE COOPERACIÓN INTERNACIONAL PARA EL DESARROLLO"
 
 
 def normalizar(texto):
@@ -88,6 +97,44 @@ def resolver_ccaa(fila):
         return None
 
     return None
+
+
+def resolver_pais_aecid(texto):
+    """iso_alpha3 si `texto` (el campo "convocatoria" de una concesion BDNS) menciona
+    exactamente un pais de PAIS_LOOKUP sin ambiguedad, o None si no menciona ninguno o menciona
+    mas de uno.
+
+    Dos salvaguardas contra falsos positivos, ambas necesarias:
+    - Limite de palabra (\\b): "JORDANIA" no debe matchear dentro de "CISJORDANIA".
+    - Preferencia por el nombre mas largo que matchea en cada posicion, marcando esos caracteres
+      como ocupados: sin esto, un texto que solo menciona "GUINEA-BISAU" contaria como DOS paises
+      (GUINEA y GUINEA-BISAU, porque "GUINEA" tambien matchea con limite de palabra ahi mismo:
+      el guion es un caracter no alfanumerico) y se descartaria como ambiguo por error.
+
+    Nunca adivina: cobertura baja es preferible a un pais incorrecto (ver spec)."""
+    if not texto:
+        return None
+    texto_norm = normalizar(texto)
+    ocupado = [False] * len(texto_norm)
+    paises_encontrados = set()
+    for nombre, iso_alpha3 in _PAIS_LOOKUP_POR_LARGO:
+        patron = r"\b" + re.escape(nombre) + r"\b"
+        for match in re.finditer(patron, texto_norm):
+            inicio, fin = match.span()
+            if any(ocupado[inicio:fin]):
+                continue
+            for i in range(inicio, fin):
+                ocupado[i] = True
+            paises_encontrados.add(iso_alpha3)
+    if len(paises_encontrados) == 1:
+        return paises_encontrados.pop()
+    return None
+
+
+def es_concesion_aecid(fila):
+    """True si la fila es una concesion de BDNS otorgada directamente por AECID (nivel1=ESTADO,
+    nivel3 con el nombre exacto de la agencia -- verificado estable en muestras de 2022 a 2026)."""
+    return fila.get("nivel1") == "ESTADO" and normalizar(fila.get("nivel3")) == normalizar(NIVEL3_AECID)
 
 
 def ultimo_dia_mes(anio, mes):

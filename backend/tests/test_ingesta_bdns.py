@@ -466,3 +466,48 @@ def test_reprocesar_desde_raw_reconstruye_agregados_desde_el_raw_local(tmp_path,
     sin_asignar_path = tmp_path / "sin_ccaa_asignada_2026-08.jsonl"
     with open(sin_asignar_path, encoding="utf-8") as f:
         assert len(f.readlines()) == 1
+
+
+def test_resolver_pais_aecid_un_pais_mencionado():
+    assert ingesta_bdns.resolver_pais_aecid("EGIPTO 2026 HELIOPOLIS Economia Circular") == "EGY"
+
+
+def test_resolver_pais_aecid_sin_pais_mencionado():
+    texto = "Resolución de la Presidencia de la AECID: Acciones Humanitarias 2024"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_dos_paises_mencionados_es_ambiguo():
+    assert ingesta_bdns.resolver_pais_aecid("Cooperación entre Costa Rica y Guatemala") is None
+
+
+def test_resolver_pais_aecid_no_matchea_pais_dentro_de_otra_palabra():
+    # "Cisjordania" no debe matchear "Jordania" (limite de palabra)
+    texto = "Mejora de la resiliencia en las laderas orientales de Cisjordania"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_prefiere_el_nombre_mas_largo_que_matchea():
+    # "Guinea-Bisau" no debe contar como "Guinea" + "Guinea-Bisau" (dos paises => ambiguo);
+    # debe resolverse al pais mas especifico que efectivamente aparece.
+    assert ingesta_bdns.resolver_pais_aecid("Apoyo a comunidades rurales de Guinea-Bisáu") == "GNB"
+
+
+def test_resolver_pais_aecid_texto_vacio():
+    assert ingesta_bdns.resolver_pais_aecid(None) is None
+    assert ingesta_bdns.resolver_pais_aecid("") is None
+
+
+def test_es_concesion_aecid_nivel1_estado_y_nivel3_aecid():
+    fila = {"nivel1": "ESTADO", "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo"}
+    assert ingesta_bdns.es_concesion_aecid(fila) is True
+
+
+def test_es_concesion_aecid_otro_organismo_estatal_no_cuenta():
+    fila = {"nivel1": "ESTADO", "nivel3": "DIRECCIÓN GENERAL DE COOPERACIÓN AUTONÓMICA Y LOCAL"}
+    assert ingesta_bdns.es_concesion_aecid(fila) is False
+
+
+def test_es_concesion_aecid_nivel1_autonomica_no_cuenta_aunque_nivel3_coincida():
+    fila = {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo"}
+    assert ingesta_bdns.es_concesion_aecid(fila) is False
