@@ -32,6 +32,7 @@ onMounted(() => {
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
   if (!store.paisesResumen.length) void store.cargarResumen()
+  if (!store.resumenAecidBdns) void store.cargarResumenAecidBdns()
   cargarCcaaSiEspana()
 })
 watch(iso3, () => {
@@ -72,6 +73,9 @@ const filasGrupos = computed(() =>
 )
 const totalCcaa = computed(() => store.resumenCcaa.reduce((acc, c) => acc + c.importe_total_eur, 0))
 const concesionesCcaa = computed(() => store.resumenCcaa.reduce((acc, c) => acc + c.n_concesiones, 0))
+const preliminarAecidBdns = computed(() =>
+  store.resumenAecidBdns?.por_pais.find((p) => p.iso_alpha3 === iso3.value) ?? null
+)
 
 function onSelectYear(anio: number) {
   store.setFiltroAnio(store.filtroAnio === anio ? null : anio)
@@ -110,6 +114,11 @@ function onSelectYear(anio: number) {
       <StatTile :valor="formatPorcentaje(share)" etiqueta="Del total repartido" />
       <StatTile :valor="grupoPrincipal" etiqueta="Sector principal" />
     </section>
+    <p v-if="preliminarAecidBdns" class="note nota-preliminar">
+      + {{ formatEURCompacto(preliminarAecidBdns.importe_eur) }} preliminares confirmados por AECID vía
+      BDNS, aún no publicados en IATI ({{ preliminarAecidBdns.n_concesiones }} concesión(es)). Ver
+      <router-link to="/sobre">Sobre los datos</router-link>.
+    </p>
 
     <section class="cols">
       <div class="block">
@@ -147,5 +156,8 @@ function onSelectYear(anio: number) {
   padding: 0.5rem 1rem;
   background: #fee2e2;
   color: #b91c1c;
+}
+.nota-preliminar {
+  margin-top: -8px;
 }
 </style>
