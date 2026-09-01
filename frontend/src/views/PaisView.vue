@@ -114,7 +114,7 @@ function onSelectYear(anio: number) {
       <StatTile :valor="formatPorcentaje(share)" etiqueta="Del total repartido" />
       <StatTile :valor="grupoPrincipal" etiqueta="Sector principal" />
     </section>
-    <p v-if="preliminarAecidBdns" class="note nota-preliminar">
+    <p v-if="preliminarAecidBdns && preliminarAecidBdns.importe_eur > 0 && !store.filtroAnio && !store.filtroGrupo" class="note nota-preliminar">
       + {{ formatEURCompacto(preliminarAecidBdns.importe_eur) }} preliminares confirmados por AECID vía
       BDNS, aún no publicados en IATI ({{ preliminarAecidBdns.n_concesiones }} concesión(es)). Ver
       <router-link to="/sobre">Sobre los datos</router-link>.

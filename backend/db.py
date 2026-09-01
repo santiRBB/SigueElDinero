@@ -271,25 +271,42 @@ def sectores_disponibles() -> list[dict]:
 
 def resumen_aecid_bdns() -> dict:
     """Concesiones de AECID vistas en BDNS que todavia no aparecen publicadas en IATI
-    (fact_gasto), agrupadas por pais cuando se pudo identificar uno sin ambiguedad. El
-    'not exists' es un dedup EXACTO, no una heuristica: el sufijo numerico de fact_gasto.url_bdns
-    es literalmente el campo numeroConvocatoria de BDNS (verificado en vivo contra la API de BDNS,
-    ver spec) -- si existe, esa concesion ya esta publicada y se excluye."""
+    (fact_gasto), agrupadas por pais cuando ese pais ya tiene actividad IATI propia (fila en
+    dim_pais) -- todo lo demas (sin pais identificado, o pais identificado pero aun sin fila en
+    dim_pais) cae en sin_pais, ya que no hay ninguna ficha /paises/XXX navegable para el.
+
+    El dedup es EXACTO, no una heuristica: se extrae el sufijo numerico de fact_gasto.url_bdns
+    (todo lo que sigue a "/convocatorias/") y se compara por igualdad contra numero_convocatoria --
+    verificado en vivo contra la API de BDNS que ese sufijo es literalmente ese campo (ver spec).
+    Se usa split_part + igualdad en vez de LIKE con concatenacion: evita que un numero_convocatoria
+    con caracteres '%'/'_' (nunca deberia pasar, pero no esta validado en la ingesta) se interprete
+    como comodin, y permite que Postgres resuelva el anti-join con un hash en vez de un escaneo por
+    fila.
+
+    Nota: el dedup es a nivel de convocatoria, no de concesion individual -- si IATI publica una
+    sola actividad para una convocatoria con varias concesiones BDNS, se suprimen todas las
+    concesiones de esa convocatoria, no solo la publicada. Es el comportamiento conservador
+    correcto: nunca se corre el riesgo de contar doble, a costa de ocultar alguna concesion de esa
+    convocatoria que todavia no tenga su propia actividad IATI."""
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                select b.iso_alpha3,
-                       sum(b.importe_eur) as importe_eur,
-                       count(*) as n_concesiones
-                from fact_gasto_aecid_bdns b
+                select b.iso_alpha3, b.importe_eur, b.n_concesiones
+                from (
+                    select b.iso_alpha3,
+                           sum(b.importe_eur) as importe_eur,
+                           count(*) as n_concesiones
+                    from fact_gasto_aecid_bdns b
+                    where not exists (
+                        select 1 from fact_gasto f
+                        where split_part(f.url_bdns, '/convocatorias/', 2) = b.numero_convocatoria
+                    )
+                    group by b.iso_alpha3
+                ) b
                 where b.iso_alpha3 is not null
-                  and not exists (
-                      select 1 from fact_gasto f
-                      where f.url_bdns like '%/convocatorias/' || b.numero_convocatoria
-                  )
-                group by b.iso_alpha3
-                order by importe_eur desc
+                  and exists (select 1 from dim_pais p where p.iso_alpha3 = b.iso_alpha3)
+                order by b.importe_eur desc
             """)
             por_pais = cur.fetchall()
 
@@ -297,11 +314,14 @@ def resumen_aecid_bdns() -> dict:
                 select coalesce(sum(b.importe_eur), 0) as importe_eur,
                        coalesce(count(*), 0) as n_concesiones
                 from fact_gasto_aecid_bdns b
-                where b.iso_alpha3 is null
-                  and not exists (
-                      select 1 from fact_gasto f
-                      where f.url_bdns like '%/convocatorias/' || b.numero_convocatoria
-                  )
+                where not exists (
+                    select 1 from fact_gasto f
+                    where split_part(f.url_bdns, '/convocatorias/', 2) = b.numero_convocatoria
+                )
+                and (
+                    b.iso_alpha3 is null
+                    or not exists (select 1 from dim_pais p where p.iso_alpha3 = b.iso_alpha3)
+                )
             """)
             sin_pais = cur.fetchone()
     finally:

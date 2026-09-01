@@ -554,6 +554,8 @@ def test_resumen_aecid_bdns_excluye_lo_ya_publicado_en_iati(monkeypatch):
     assert "not exists" in sql.lower()
     assert "numero_convocatoria" in sql
     assert "url_bdns" in sql
+    assert "split_part" in sql
+    assert "dim_pais" in sql
 
 
 def test_resumen_aecid_bdns_separa_sin_pais(monkeypatch):
@@ -583,3 +585,39 @@ def test_resumen_aecid_bdns_separa_sin_pais(monkeypatch):
 
     assert result["por_pais"] == [{"iso_alpha3": "CRI", "importe_eur": 100.0, "n_concesiones": 1}]
     assert result["sin_pais"] == {"importe_eur": 50.0, "n_concesiones": 3}
+    por_pais_sql, _ = cursor.executed[0]
+    assert "dim_pais" in por_pais_sql
+    sin_pais_sql, _ = cursor.executed[1]
+    assert "dim_pais" in sin_pais_sql
+
+
+def test_resumen_aecid_bdns_excluye_pais_sin_fila_en_dim_pais(monkeypatch):
+    class DosConsultasCursor(FakeCursor):
+        def __init__(self):
+            super().__init__(rows=[])
+            self._responses = [
+                [],  # por_pais: vacio porque XYZ (identificado) no tiene fila en dim_pais
+                [{"importe_eur": 500.0, "n_concesiones": 1}],  # sin_pais: cae aca
+            ]
+            self._call = 0
+
+        def fetchall(self):
+            rows = self._responses[self._call]
+            self._call += 1
+            return rows
+
+        def fetchone(self):
+            rows = self._responses[self._call]
+            return rows[0] if rows else None
+
+    cursor = DosConsultasCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.resumen_aecid_bdns()
+
+    por_pais_sql, _ = cursor.executed[0]
+    assert "dim_pais" in por_pais_sql
+    sin_pais_sql, _ = cursor.executed[1]
+    assert "dim_pais" in sin_pais_sql
+    assert result["sin_pais"] == {"importe_eur": 500.0, "n_concesiones": 1}

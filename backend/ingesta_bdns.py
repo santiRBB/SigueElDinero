@@ -56,6 +56,12 @@ CCAA_LOOKUP_PATH = Path(__file__).parent / "ccaa_lookup.json"
 with open(CCAA_LOOKUP_PATH, "r", encoding="utf-8") as f:
     CCAA_LOOKUP = json.load(f)
 
+# pais_lookup.json excluye deliberadamente nombres de pais que colisionan con nombres de lugares o
+# instituciones espanolas comunes: ESPANA, GRANADA y SANTA LUCIA se sacaron de ahi despues de
+# observar falsos positivos reales contra datos de produccion (una subvencion domestica a "LA
+# COORDINADORA DE ONGD ESPANA" resolviendo a Espana como pais receptor; "Universidad de Granada" a
+# Grenada; "Santa Lucia de Tirajana", un municipio de Gran Canaria, a Santa Lucia) -- ver spec de
+# diseno. No los vuelvas a agregar sin resolver antes esa ambiguedad.
 PAIS_LOOKUP_PATH = Path(__file__).parent / "pais_lookup.json"
 with open(PAIS_LOOKUP_PATH, "r", encoding="utf-8") as f:
     PAIS_LOOKUP = json.load(f)

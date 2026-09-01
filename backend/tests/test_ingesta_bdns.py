@@ -525,6 +525,21 @@ def test_resolver_pais_aecid_texto_vacio():
     assert ingesta_bdns.resolver_pais_aecid("") is None
 
 
+def test_resolver_pais_aecid_no_matchea_espana_como_pais_destino():
+    texto = "SUBVENCIÓN DIRECTA A LA COORDINADORA DE ONGD ESPAÑA PARA LA FINANCIACION DE LOS GASTOS"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_no_matchea_granada_universidad():
+    texto = "Convocatoria Universidad de Granada para cooperación internacional"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_no_matchea_santa_lucia_de_tirajana():
+    texto = "Ayuntamiento de Santa Lucía de Tirajana, actividades de sensibilización"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
 def test_es_concesion_aecid_nivel1_estado_y_nivel3_aecid():
     fila = {"nivel1": "ESTADO", "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo"}
     assert ingesta_bdns.es_concesion_aecid(fila) is True
