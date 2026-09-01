@@ -164,11 +164,18 @@ def _get_con_reintentos(client, url, params):
             time.sleep(espera)
 
 
-def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar):
-    """Aplica resolver_ccaa a una fila y actualiza los tres acumuladores in-place. Reutilizada tanto
-    por procesar_mes (paginando la API en vivo) como por reprocesar_desde_raw (releyendo un
+def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid=None):
+    """Aplica resolver_ccaa a una fila y actualiza los cuatro acumuladores in-place. Reutilizada
+    tanto por procesar_mes (paginando la API en vivo) como por reprocesar_desde_raw (releyendo un
     raw/*.jsonl.gz ya descargado, sin red) -- misma logica de agregacion sin importar de donde
-    vinieron las filas."""
+    vinieron las filas.
+
+    concesiones_aecid es un canal ADICIONAL, no una rama alternativa: una fila de AECID
+    (es_concesion_aecid) sigue yendo tambien a sin_asignar como antes (nivel1=ESTADO nunca matchea
+    ninguna CCAA), y ademas se agrega aqui si concesiones_aecid no es None."""
+    if concesiones_aecid is not None and es_concesion_aecid(fila):
+        concesiones_aecid.append(fila)
+
     codigo_ine = resolver_ccaa(fila)
     if codigo_ine is None:
         sin_asignar.append(fila)
@@ -193,28 +200,31 @@ def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar):
 
 def procesar_mes(
     anio, mes, client, raw_writer,
-    totales_ccaa=None, totales_organismo=None, sin_asignar=None, pagina_inicial=0,
+    totales_ccaa=None, totales_organismo=None, sin_asignar=None, concesiones_aecid=None,
+    pagina_inicial=0,
 ):
     """Pagina /concesiones/busqueda desde pagina_inicial (0 por defecto, es decir el mes completo)
-    hasta el final, agrega por CCAA y por organismo dentro de cada CCAA, y devuelve (totales_ccaa,
-    totales_organismo, sin_asignar, num_paginas). Cada fila se escribe a medida que llega en
-    raw_writer (cualquier objeto con .write(str) -> None, p.ej. un gzip.open(...) en modo texto) --
-    no acumula las filas crudas en memoria. Quien llama controla el ciclo de vida del archivo
-    (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite detectar en los logs una
-    respuesta prematuramente truncada por la API.
+    hasta el final, agrega por CCAA y por organismo dentro de cada CCAA, recolecta aparte las
+    concesiones otorgadas directamente por AECID (ver es_concesion_aecid), y devuelve (totales_ccaa,
+    totales_organismo, sin_asignar, concesiones_aecid, num_paginas). Cada fila se escribe a medida
+    que llega en raw_writer (cualquier objeto con .write(str) -> None, p.ej. un gzip.open(...) en
+    modo texto) -- no acumula las filas crudas en memoria. Quien llama controla el ciclo de vida del
+    archivo (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite detectar en los logs
+    una respuesta prematuramente truncada por la API.
 
-    totales_ccaa/totales_organismo/sin_asignar aceptan acumuladores ya iniciados (en vez de vacios)
-    para retomar un mes cortado a mitad de camino -- ver main() y el flag --continuar: como cada
-    fila ya escrita en el raw de una corrida anterior sigue integra en disco (el gzip se cierra bien
-    incluso si procesar_mes termina en excepcion, solo un kill del proceso lo dejaria a medias),
-    alcanza con re-sumar esas filas y pedir desde pagina_inicial en adelante, en vez de reprocesar
-    el mes entero de nuevo."""
+    Los cuatro acumuladores aceptan valores ya iniciados (en vez de vacios) para retomar un mes
+    cortado a mitad de camino -- ver main() y el flag --continuar: como cada fila ya escrita en el
+    raw de una corrida anterior sigue integra en disco (el gzip se cierra bien incluso si
+    procesar_mes termina en excepcion, solo un kill del proceso lo dejaria a medias), alcanza con
+    re-sumar esas filas y pedir desde pagina_inicial en adelante, en vez de reprocesar el mes entero
+    de nuevo."""
     fecha_desde = f"01/{mes:02d}/{anio}"
     fecha_hasta = f"{ultimo_dia_mes(anio, mes):02d}/{mes:02d}/{anio}"
 
     totales_ccaa = {} if totales_ccaa is None else totales_ccaa
     totales_organismo = {} if totales_organismo is None else totales_organismo
     sin_asignar = [] if sin_asignar is None else sin_asignar
+    concesiones_aecid = [] if concesiones_aecid is None else concesiones_aecid
 
     page = pagina_inicial
     num_paginas = 0
@@ -227,14 +237,14 @@ def procesar_mes(
 
         for fila in data["content"]:
             raw_writer.write(json.dumps(fila, ensure_ascii=False) + "\n")
-            _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar)
+            _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
 
         if data.get("last", True) or not data["content"]:
             break
         page += 1
         time.sleep(PAUSA_ENTRE_PAGINAS)
 
-    return totales_ccaa, totales_organismo, sin_asignar, num_paginas
+    return totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, num_paginas
 
 
 TOP_ORGANISMOS_POR_MES = 15
@@ -281,7 +291,7 @@ def _escribir_atomico(ruta, lineas):
         raise
 
 
-def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar):
+def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid=None):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     sufijo = f"{anio}-{mes:02d}"
 
@@ -314,6 +324,22 @@ def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar):
     _escribir_atomico(
         OUTPUT_DIR / f"sin_ccaa_asignada_{sufijo}.jsonl",
         (json.dumps(fila, ensure_ascii=False) for fila in sin_asignar),
+    )
+
+    _escribir_atomico(
+        OUTPUT_DIR / f"agregado_aecid_{sufijo}.jsonl",
+        (
+            json.dumps({
+                "concesion_id": fila.get("id"),
+                "numero_convocatoria": str(fila.get("numeroConvocatoria")),
+                "iso_alpha3": resolver_pais_aecid(fila.get("convocatoria")),
+                "beneficiario": fila.get("beneficiario"),
+                "titulo": fila.get("convocatoria"),
+                "importe_eur": round(fila.get("importe") or 0.0, 2),
+                "fecha_concesion": fila.get("fechaConcesion"),
+            }, ensure_ascii=False)
+            for fila in (concesiones_aecid or [])
+        ),
     )
 
 
@@ -358,10 +384,12 @@ def _lock_mes(sufijo):
 
 def reprocesar_desde_raw(anio, mes):
     """Reconstruye las salidas agregadas (agregado_ccaa, agregado_ccaa_organismo,
-    sin_ccaa_asignada) de un mes a partir de su raw/{YYYY-MM}.jsonl.gz ya descargado, sin volver a
-    pegarle a la API de BDNS. Pensado para poblar agregado_ccaa_organismo_{YYYY-MM}.jsonl en meses
-    que ya se habian backfilleado antes de que ese desglose existiera -- y de paso, si
-    ccaa_lookup.json crecio despues de esa corrida original, mejora tambien la asignacion a CCAA.
+    sin_ccaa_asignada, agregado_aecid) de un mes a partir de su raw/{YYYY-MM}.jsonl.gz ya
+    descargado, sin volver a pegarle a la API de BDNS. Pensado para poblar
+    agregado_ccaa_organismo_{YYYY-MM}.jsonl en meses que ya se habian backfilleado antes de que ese
+    desglose existiera (o, ahora, agregado_aecid_{YYYY-MM}.jsonl en meses backfilleados antes de que
+    esta fuente existiera) -- y de paso, si ccaa_lookup.json o pais_lookup.json crecieron despues de
+    esa corrida original, mejora tambien la asignacion.
 
     Lanza SystemExit si no existe el raw de ese mes, o si existe pero no tiene su marcador de mes
     completo (ver _ruta_marcador_completo) -- reprocesar un raw parcial produciria un agregado
@@ -386,11 +414,12 @@ def reprocesar_desde_raw(anio, mes):
     totales_ccaa = {}
     totales_organismo = {}
     sin_asignar = []
+    concesiones_aecid = []
     try:
         with gzip.open(raw_path, "rt", encoding="utf-8") as f:
             for linea in f:
                 fila = json.loads(linea)
-                _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar)
+                _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
     except Exception as e:
         raise SystemExit(
             f"{raw_path} esta corrupto o incompleto ({e}) -- probablemente quedo asi por un corte "
@@ -400,7 +429,7 @@ def reprocesar_desde_raw(anio, mes):
         ) from e
 
     totales_organismo = recortar_top_organismos(totales_organismo)
-    escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
+    escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
 
     total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
     log.info(
@@ -415,7 +444,7 @@ def _cargar_checkpoint(sufijo):
     reconstruir los acumuladores y calcula desde que pagina seguir (filas ya en disco entre
     PAGE_SIZE -- todas las paginas ya escritas estan completas, nunca a medias: procesar_mes solo
     escribe las filas de una pagina despues de haberla pedido entera con exito). Devuelve
-    (totales_ccaa, totales_organismo, sin_asignar, pagina_inicial).
+    (totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, pagina_inicial).
 
     Si no hay nada que retomar, si el raw existente tiene menos de una pagina completa, o si no se
     puede leer (p.ej. quedo a medias por un kill del proceso, no por una excepcion normal de
@@ -423,33 +452,34 @@ def _cargar_checkpoint(sufijo):
     raw y arranca de cero, exactamente igual que sin --continuar."""
     raw_path = RAW_DIR / f"{sufijo}.jsonl.gz"
     if not raw_path.exists():
-        return {}, {}, [], 0
+        return {}, {}, [], [], 0
 
     totales_ccaa = {}
     totales_organismo = {}
     sin_asignar = []
+    concesiones_aecid = []
     n_filas_previas = 0
     try:
         with gzip.open(raw_path, "rt", encoding="utf-8") as f:
             for linea in f:
-                _acumular_fila(json.loads(linea), totales_ccaa, totales_organismo, sin_asignar)
+                _acumular_fila(json.loads(linea), totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
                 n_filas_previas += 1
     except Exception as e:
         log.warning("No se pudo leer el raw parcial de %s (%s) -- arrancando de cero.", sufijo, e)
-        return {}, {}, [], 0
+        return {}, {}, [], [], 0
 
     pagina_inicial = n_filas_previas // PAGE_SIZE
     if pagina_inicial == 0:
         # Menos de una pagina completa en disco -- se descarta y se arranca de cero (el caller
         # trunca el raw), en vez de arriesgarse a contar dos veces esas filas cuando la pagina 0
         # se vuelva a pedir.
-        return {}, {}, [], 0
+        return {}, {}, [], [], 0
 
     log.info(
         "Retomando %s desde un raw parcial (%d filas ya en disco, pagina %d)...",
         sufijo, n_filas_previas, pagina_inicial,
     )
-    return totales_ccaa, totales_organismo, sin_asignar, pagina_inicial
+    return totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, pagina_inicial
 
 
 def main():
@@ -477,8 +507,8 @@ def main():
         log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
         RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-        totales_ccaa, totales_organismo, sin_asignar, pagina_inicial = (
-            _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], 0)
+        totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, pagina_inicial = (
+            _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], [], 0)
         )
         modo_apertura = "at" if pagina_inicial else "wt"
         marcador_completo = _ruta_marcador_completo(sufijo)
@@ -491,14 +521,15 @@ def main():
 
         with httpx.Client(timeout=30) as client:
             with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", modo_apertura, encoding="utf-8") as raw_writer:
-                totales_ccaa, totales_organismo, sin_asignar, num_paginas = procesar_mes(
+                totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, num_paginas = procesar_mes(
                     anio, mes, client, raw_writer,
                     totales_ccaa=totales_ccaa, totales_organismo=totales_organismo,
-                    sin_asignar=sin_asignar, pagina_inicial=pagina_inicial,
+                    sin_asignar=sin_asignar, concesiones_aecid=concesiones_aecid,
+                    pagina_inicial=pagina_inicial,
                 )
         marcador_completo.touch()
         totales_organismo = recortar_top_organismos(totales_organismo)
-        escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar)
+        escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
 
         total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
 
@@ -508,6 +539,7 @@ def main():
         )
         log.info("Paginas procesadas: %d", num_paginas)
         log.info("Total de filas procesadas este mes: %d", total_filas)
+        log.info("Concesiones de AECID detectadas este mes: %d", len(concesiones_aecid))
         log.info("Salida en: %s", OUTPUT_DIR.resolve())
 
         no_asignados_local = Counter(
