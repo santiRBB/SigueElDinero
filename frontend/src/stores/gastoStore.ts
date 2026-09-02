@@ -6,6 +6,7 @@ import {
   getDetalleCcaa,
   getDetallePais,
   getPaisPorAnio,
+  getResumenAecidBdns,
   getResumenCcaa,
   getResumenPaises,
   getResumenPorAnio,
@@ -13,6 +14,7 @@ import {
   getSectores,
 } from '../services/api'
 import type {
+  AecidBdnsResumen,
   AnioImporte,
   CcaaAnio,
   CcaaDetalle,
@@ -34,6 +36,7 @@ interface GastoState {
   detalleCcaa: CcaaDetalle | null
   detalleCcaaError: string | null
   ccaaPorAnio: CcaaAnio[]
+  resumenAecidBdns: AecidBdnsResumen | null
   aniosDisponibles: number[]
   gruposDisponibles: Grupo[]
   filtroAnio: number | null
@@ -76,6 +79,7 @@ export const useGastoStore = defineStore('gasto', {
     detalleCcaa: null,
     detalleCcaaError: null,
     ccaaPorAnio: [],
+    resumenAecidBdns: null,
     aniosDisponibles: [],
     gruposDisponibles: [],
     filtroAnio: null,
@@ -179,6 +183,14 @@ export const useGastoStore = defineStore('gasto', {
       } catch {
         if (token !== resumenCcaaRequestToken) return
         this.resumenCcaa = []
+      }
+    },
+    async cargarResumenAecidBdns() {
+      try {
+        const data = await getResumenAecidBdns()
+        this.resumenAecidBdns = data
+      } catch {
+        this.resumenAecidBdns = null
       }
     },
     async seleccionarCcaa(codigoIne: string) {

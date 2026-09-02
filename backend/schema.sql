@@ -105,3 +105,19 @@ create table if not exists fact_gasto_ccaa_organismo (
     n_concesiones       int not null,
     primary key (ccaa_id, anio, mes, organismo)
 );
+
+-- Concesiones de BDNS otorgadas directamente por AECID, no publicadas todavia en IATI (fact_gasto).
+-- Sin FK a dim_pais a proposito: un pais puede aparecer primero por esta via, antes de tener
+-- ninguna actividad IATI. Nunca se mezcla con fact_gasto -- ver
+-- docs/superpowers/specs/2026-09-01-adelanto-aecid-bdns-design.md.
+create table if not exists fact_gasto_aecid_bdns (
+    concesion_id        bigint primary key,        -- id de BDNS, natural key
+    numero_convocatoria text not null,              -- para el dedup contra fact_gasto.url_bdns
+    iso_alpha3          varchar(3),                 -- null si no se identifico un unico pais
+    beneficiario        text,
+    titulo              text,                       -- campo "convocatoria" de BDNS
+    importe_eur         numeric(14,2) not null,
+    fecha_concesion      date,
+    fecha_ingesta        timestamptz default now()
+);
+create index if not exists idx_aecid_bdns_pais on fact_gasto_aecid_bdns(iso_alpha3);

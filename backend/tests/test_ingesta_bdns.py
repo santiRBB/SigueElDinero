@@ -136,7 +136,7 @@ def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
     client = FakeClientPaginado(paginas)
     raw_writer = io.StringIO()
 
-    totales, totales_organismo, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, client, raw_writer)
+    totales, totales_organismo, sin_asignar, concesiones_aecid, num_paginas = ingesta_bdns.procesar_mes(2026, 8, client, raw_writer)
 
     assert totales == {
         "09": {"importe_total_eur": 150.0, "n_concesiones": 2},
@@ -154,6 +154,7 @@ def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
     assert len(sin_asignar) == 1
     assert sin_asignar[0]["nivel1"] == "ESTATAL"
     assert num_paginas == 2
+    assert concesiones_aecid == []
     filas_escritas = [json.loads(linea) for linea in raw_writer.getvalue().splitlines()]
     assert len(filas_escritas) == 4
     assert client.llamadas[0][1]["fechaDesde"] == "01/08/2026"
@@ -173,7 +174,7 @@ def test_procesar_mes_reintenta_ante_fallo_de_red(monkeypatch):
             return FakeResponsePagina(content=[], last=True)
 
     raw_writer = io.StringIO()
-    totales, totales_organismo, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(2026, 8, FlakyClient(), raw_writer)
+    totales, totales_organismo, sin_asignar, concesiones_aecid, num_paginas = ingesta_bdns.procesar_mes(2026, 8, FlakyClient(), raw_writer)
 
     assert intentos["n"] == 3
     assert totales == {}
@@ -210,7 +211,7 @@ def test_procesar_mes_arranca_desde_pagina_inicial_con_acumuladores_previos(monk
     raw_writer = io.StringIO()
     totales_previos = {"09": {"importe_total_eur": 100.0, "n_concesiones": 1}}
 
-    totales, totales_org, sin_asignar, num_paginas = ingesta_bdns.procesar_mes(
+    totales, totales_org, sin_asignar, concesiones_aecid, num_paginas = ingesta_bdns.procesar_mes(
         2026, 8, client, raw_writer,
         totales_ccaa=totales_previos, pagina_inicial=5,
     )
@@ -249,6 +250,32 @@ def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
     sin_asignar_path = tmp_path / "sin_ccaa_asignada_2026-08.jsonl"
     with open(sin_asignar_path, encoding="utf-8") as f:
         assert len(f.readlines()) == 1
+
+
+def test_escribir_salidas_crea_el_archivo_agregado_aecid(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    concesiones_aecid = [{
+        "id": 156033296, "nivel1": "ESTADO",
+        "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
+        "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA. GRANDES BOSQUES 2026 (FUNDECOR)",
+        "numeroConvocatoria": "914029", "importe": 56501.4, "fechaConcesion": "2026-07-21",
+    }]
+
+    ingesta_bdns.escribir_salidas(2026, 8, {}, {}, [], concesiones_aecid)
+
+    aecid_path = tmp_path / "agregado_aecid_2026-08.jsonl"
+    with open(aecid_path, encoding="utf-8") as f:
+        filas = [json.loads(linea) for linea in f]
+    assert filas == [{
+        "concesion_id": 156033296,
+        "numero_convocatoria": "914029",
+        "iso_alpha3": "CRI",
+        "beneficiario": "FUNDECOR",
+        "titulo": "COSTA RICA. GRANDES BOSQUES 2026 (FUNDECOR)",
+        "importe_eur": 56501.4,
+        "fecha_concesion": "2026-07-21",
+    }]
 
 
 def test_escribir_salidas_no_deja_archivo_final_si_falla_a_mitad(tmp_path, monkeypatch):
@@ -351,7 +378,7 @@ def test_ruta_marcador_completo(tmp_path, monkeypatch):
 def test_cargar_checkpoint_sin_raw_devuelve_vacio(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
 
-    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], 0)
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], 0)
 
 
 def test_cargar_checkpoint_retoma_desde_paginas_completas(tmp_path, monkeypatch):
@@ -368,7 +395,7 @@ def test_cargar_checkpoint_retoma_desde_paginas_completas(tmp_path, monkeypatch)
         for fila in filas:
             f.write(json.dumps(fila, ensure_ascii=False) + "\n")
 
-    totales_ccaa, totales_organismo, sin_asignar, pagina_inicial = ingesta_bdns._cargar_checkpoint("2026-08")
+    totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, pagina_inicial = ingesta_bdns._cargar_checkpoint("2026-08")
 
     assert pagina_inicial == 2  # 4 filas / PAGE_SIZE(2)
     assert totales_ccaa["09"] == {"importe_total_eur": 30.0, "n_concesiones": 2}
@@ -384,14 +411,14 @@ def test_cargar_checkpoint_menos_de_una_pagina_completa_arranca_de_cero(tmp_path
             {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 10.0}, ensure_ascii=False,
         ) + "\n")
 
-    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], 0)
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], 0)
 
 
 def test_cargar_checkpoint_raw_illegible_arranca_de_cero(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
     (tmp_path / "2026-08.jsonl.gz").write_bytes(b"esto no es un gzip valido")
 
-    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], 0)
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], 0)
 
 
 def test_reprocesar_desde_raw_lanza_si_no_existe_el_raw(tmp_path, monkeypatch):
@@ -466,3 +493,103 @@ def test_reprocesar_desde_raw_reconstruye_agregados_desde_el_raw_local(tmp_path,
     sin_asignar_path = tmp_path / "sin_ccaa_asignada_2026-08.jsonl"
     with open(sin_asignar_path, encoding="utf-8") as f:
         assert len(f.readlines()) == 1
+
+
+def test_resolver_pais_aecid_un_pais_mencionado():
+    assert ingesta_bdns.resolver_pais_aecid("EGIPTO 2026 HELIOPOLIS Economia Circular") == "EGY"
+
+
+def test_resolver_pais_aecid_sin_pais_mencionado():
+    texto = "Resolución de la Presidencia de la AECID: Acciones Humanitarias 2024"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_dos_paises_mencionados_es_ambiguo():
+    assert ingesta_bdns.resolver_pais_aecid("Cooperación entre Costa Rica y Guatemala") is None
+
+
+def test_resolver_pais_aecid_no_matchea_pais_dentro_de_otra_palabra():
+    # "Cisjordania" no debe matchear "Jordania" (limite de palabra)
+    texto = "Mejora de la resiliencia en las laderas orientales de Cisjordania"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_prefiere_el_nombre_mas_largo_que_matchea():
+    # "Guinea-Bisau" no debe contar como "Guinea" + "Guinea-Bisau" (dos paises => ambiguo);
+    # debe resolverse al pais mas especifico que efectivamente aparece.
+    assert ingesta_bdns.resolver_pais_aecid("Apoyo a comunidades rurales de Guinea-Bisáu") == "GNB"
+
+
+def test_resolver_pais_aecid_texto_vacio():
+    assert ingesta_bdns.resolver_pais_aecid(None) is None
+    assert ingesta_bdns.resolver_pais_aecid("") is None
+
+
+def test_resolver_pais_aecid_no_matchea_espana_como_pais_destino():
+    texto = "SUBVENCIÓN DIRECTA A LA COORDINADORA DE ONGD ESPAÑA PARA LA FINANCIACION DE LOS GASTOS"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_no_matchea_granada_universidad():
+    texto = "Convocatoria Universidad de Granada para cooperación internacional"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_no_matchea_santa_lucia_de_tirajana():
+    texto = "Ayuntamiento de Santa Lucía de Tirajana, actividades de sensibilización"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_es_concesion_aecid_nivel1_estado_y_nivel3_aecid():
+    fila = {"nivel1": "ESTADO", "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo"}
+    assert ingesta_bdns.es_concesion_aecid(fila) is True
+
+
+def test_es_concesion_aecid_otro_organismo_estatal_no_cuenta():
+    fila = {"nivel1": "ESTADO", "nivel3": "DIRECCIÓN GENERAL DE COOPERACIÓN AUTONÓMICA Y LOCAL"}
+    assert ingesta_bdns.es_concesion_aecid(fila) is False
+
+
+def test_es_concesion_aecid_nivel1_autonomica_no_cuenta_aunque_nivel3_coincida():
+    fila = {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo"}
+    assert ingesta_bdns.es_concesion_aecid(fila) is False
+
+
+def test_acumular_fila_agrega_concesiones_aecid_sin_afectar_ccaa():
+    totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid = {}, {}, [], []
+    fila_aecid = {
+        "id": 156033296, "nivel1": "ESTADO",
+        "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
+        "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA. GRANDES BOSQUES 2026 (FUNDECOR)",
+        "numeroConvocatoria": "914029", "importe": 56501.4, "fechaConcesion": "2026-07-21",
+    }
+    fila_otro_estado = {"nivel1": "ESTADO", "nivel2": None, "importe": 999.0}
+    fila_autonomica = {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0}
+
+    for fila in (fila_aecid, fila_otro_estado, fila_autonomica):
+        ingesta_bdns._acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
+
+    assert concesiones_aecid == [fila_aecid]
+    # fila_aecid y fila_otro_estado no matchean ninguna CCAA -> ambas van a sin_asignar tambien,
+    # sin cambios respecto al comportamiento actual (concesiones_aecid es un canal ADICIONAL).
+    assert len(sin_asignar) == 2
+    assert totales_ccaa == {"09": {"importe_total_eur": 10.0, "n_concesiones": 1}}
+
+
+def test_procesar_mes_agrega_concesiones_aecid(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    fila_aecid = {
+        "id": 1, "nivel1": "ESTADO",
+        "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
+        "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA", "numeroConvocatoria": "1",
+        "importe": 100.0, "fechaConcesion": "2026-07-21",
+    }
+    paginas = [FakeResponsePagina(content=[fila_aecid], last=True)]
+    client = FakeClientPaginado(paginas)
+    raw_writer = io.StringIO()
+
+    totales, totales_organismo, sin_asignar, concesiones_aecid, num_paginas = ingesta_bdns.procesar_mes(
+        2026, 8, client, raw_writer
+    )
+
+    assert concesiones_aecid == [fila_aecid]

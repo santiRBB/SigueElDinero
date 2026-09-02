@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useGastoStore } from '../stores/gastoStore'
+import { formatEURCompacto } from '../utils/formato'
 
 const store = useGastoStore()
 
 onMounted(() => {
   void store.cargarFiltros()
+  if (!store.resumenAecidBdns) void store.cargarResumenAecidBdns()
 })
 </script>
 
@@ -25,6 +27,22 @@ onMounted(() => {
       Datos Nacional de Subvenciones (BDNS), que publica las concesiones de subvenciones públicas
       dentro de España. Es un dato de cooperación doméstica, no de cooperación internacional, y por
       eso no se suma al resto de totales por país de esta web.
+    </p>
+    <p>
+      Además, algunas cifras de países muestran una línea "preliminares confirmados por AECID vía
+      BDNS": son concesiones que AECID ya registró en la Base de Datos Nacional de Subvenciones,
+      pero que todavía no publicó como actividad en IATI (se verificó un desfase real de varios
+      meses entre ambas). Se muestran aparte de "Comprometido con este país" porque BDNS no declara
+      cómo se reparte un importe entre varios países cuando un proyecto cubre más de uno — a
+      diferencia de IATI, que sí lo hace explícitamente. El país solo se identifica cuando el texto
+      de la convocatoria lo menciona sin ambigüedad; si no, el importe se cuenta igual pero sin
+      asignarlo a ningún país.
+      <span v-if="store.resumenAecidBdns && store.resumenAecidBdns.sin_pais.importe_eur > 0">
+        Además, hay {{ formatEURCompacto(store.resumenAecidBdns.sin_pais.importe_eur) }} en
+        {{ store.resumenAecidBdns.sin_pais.n_concesiones }} concesión(es) de AECID ya registradas en
+        BDNS para las que no se pudo identificar un país sin ambigüedad — no aparecen en ninguna
+        ficha de país, pero sí forman parte del total que AECID ya tiene confirmado en BDNS.
+      </span>
     </p>
     <h2>Unidad de medida</h2>
     <p>

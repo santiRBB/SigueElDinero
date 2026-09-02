@@ -248,3 +248,17 @@ def test_ccaa_por_anio_returns_data_when_found(monkeypatch):
     assert resp.status_code == 200
     assert resp.json() == fake
     assert called_with == {"codigo_ine": "09"}
+
+
+def test_aecid_bdns_resumen_endpoint(monkeypatch):
+    fake = {
+        "por_pais": [{"iso_alpha3": "CRI", "importe_eur": 261818.6, "n_concesiones": 1}],
+        "sin_pais": {"importe_eur": 50000.0, "n_concesiones": 3},
+    }
+    monkeypatch.setattr(main, "resumen_aecid_bdns", lambda: fake)
+    client = TestClient(main.app)
+
+    resp = client.get("/api/aecid-bdns/resumen")
+
+    assert resp.status_code == 200
+    assert resp.json() == fake

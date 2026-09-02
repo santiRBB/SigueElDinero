@@ -221,6 +221,28 @@ describe('gastoStore', () => {
     expect(store.ccaaPorAnio).toEqual(datos)
   })
 
+  it('cargarResumenAecidBdns loads the preliminary AECID/BDNS summary', async () => {
+    const fake = {
+      por_pais: [{ iso_alpha3: 'CRI', importe_eur: 261818.6, n_concesiones: 1 }],
+      sin_pais: { importe_eur: 50000, n_concesiones: 3 },
+    }
+    vi.mocked(api.getResumenAecidBdns).mockResolvedValue(fake)
+
+    const store = useGastoStore()
+    await store.cargarResumenAecidBdns()
+
+    expect(store.resumenAecidBdns).toEqual(fake)
+  })
+
+  it('cargarResumenAecidBdns leaves resumenAecidBdns null on failure', async () => {
+    vi.mocked(api.getResumenAecidBdns).mockRejectedValue(new Error('boom'))
+
+    const store = useGastoStore()
+    await store.cargarResumenAecidBdns()
+
+    expect(store.resumenAecidBdns).toBeNull()
+  })
+
   it('cargarCcaaPorAnio clears stale data immediately so a previous ccaa never flashes under a new one', async () => {
     const datosPrevios = [{ anio: 2024, importe_eur: 100, n_concesiones: 2 }]
     const pending = deferred<typeof datosPrevios>()
