@@ -90,7 +90,27 @@
     "VALDEPENAS": "08",
     "TARRAGONA": "09",
     "TALAVERA DE LA REINA": "08",
-    "JACA": "02"
+    "JACA": "02",
+    "CALP": "10",
+    "ELCHE/ELX": "10",
+    "CONSELL COMARCAL DE OSONA": "09",
+    "EIBAR": "16",
+    "ALZIRA": "10",
+    "CONSELL COMARCAL DE L'ALT CAMP": "09",
+    "ALCOBENDAS": "13",
+    "UTIEL": "10",
+    "VITORIA-GASTEIZ": "16",
+    "MAIRENA DEL ALJARAFE": "01",
+    "ZARAGOZA": "02",
+    "GETAFE": "13",
+    "PATERNA": "10",
+    "AVILES": "03",
+    "CARBAJOSA DE LA SAGRADA": "07",
+    "ALCUDIA, L'": "04",
+    "MURCIA": "14",
+    "SANTA COLOMA DE GRAMENET": "09",
+    "PICASSENT": "10",
+    "VILAFRANCA DEL PENEDES": "09"
   },
   "local_patron": {
     "consejo insular": {

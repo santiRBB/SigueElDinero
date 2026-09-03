@@ -47,7 +47,19 @@ log = logging.getLogger("ingesta_bdns")
 BUSQUEDA_URL = "https://www.infosubvenciones.es/bdnstrans/api/concesiones/busqueda"
 PAGE_SIZE = 1000
 PAUSA_ENTRE_PAGINAS = 0.3
-REINTENTOS = 3
+REINTENTOS = 5
+# Base de la espera exponencial entre reintentos de una misma pagina (independiente de
+# PAUSA_ENTRE_PAGINAS, que es la pausa entre paginas exitosas): 3, 6, 12, 24s, tope 30s. Subido desde
+# un maximo de ~1.2s despues de que el backfill historico se cayera dos veces en un dia (2026-09-01 y
+# 2026-09-02) por rachas de "The read operation timed out" en BDNS que duraban mas que el backoff
+# viejo -- una pausa tan corta reintentaba contra el mismo bache de lentitud del servidor en vez de
+# darle tiempo a recuperarse.
+BACKOFF_BASE_REINTENTO = 3.0
+BACKOFF_TOPE_REINTENTO = 30.0
+# Timeout HTTP: el read timeout viejo (30s) coincidia exacto con la duracion de los timeouts vistos
+# en produccion, lo que sugiere paginas que tardaban justo un poco mas de 30s en responder bajo
+# carga (no una conexion muerta) y que un timeout mas generoso hubiera dejado completar.
+HTTPX_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 
 OUTPUT_DIR = Path("./salida_bdns")
 RAW_DIR = OUTPUT_DIR / "raw"
@@ -162,7 +174,7 @@ def _get_con_reintentos(client, url, params):
         except Exception as e:
             if intento == REINTENTOS:
                 raise
-            espera = PAUSA_ENTRE_PAGINAS * (2 ** intento)
+            espera = min(BACKOFF_BASE_REINTENTO * (2 ** (intento - 1)), BACKOFF_TOPE_REINTENTO)
             log.warning(
                 "Fallo en pagina %s (intento %d/%d): %s -- reintentando en %.1fs",
                 params.get("page"), intento, REINTENTOS, e, espera,
@@ -170,22 +182,39 @@ def _get_con_reintentos(client, url, params):
             time.sleep(espera)
 
 
-def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid=None):
+def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos, concesiones_aecid=None):
     """Aplica resolver_ccaa a una fila y actualiza los cuatro acumuladores in-place. Reutilizada
     tanto por procesar_mes (paginando la API en vivo) como por reprocesar_desde_raw (releyendo un
     raw/*.jsonl.gz ya descargado, sin red) -- misma logica de agregacion sin importar de donde
     vinieron las filas.
 
+    ids_vistos es un set de "id" de concesion ya contabilizados en este mes (incluye los que ya
+    estaban en disco de una corrida anterior si se esta retomando con --continuar, ver
+    _cargar_checkpoint). Defensa contra que la misma concesion aparezca en mas de una pagina: la API
+    de BDNS no acepta ningun parametro de orden explicito, y se confirmo el 2026-09-03 que su
+    totalElements/last no es fiable a partir de cierto volumen (la misma consulta de un solo dia
+    devolvio 2.147.627 y 48.974 en llamadas distintas) -- sin un orden estable, un mes que tarda
+    horas en paginarse contra un dataset que se sigue escribiendo en vivo puede ver la misma fila
+    desplazarse de pagina. Devuelve True si la fila era un duplicado (se descarta sin tocar ningun
+    acumulador ni concesiones_aecid), False en caso contrario. Una fila sin "id" nunca se considera
+    duplicada (no deberia pasar en datos reales de la API, pero por si acaso no se descarta a ciegas).
+
     concesiones_aecid es un canal ADICIONAL, no una rama alternativa: una fila de AECID
     (es_concesion_aecid) sigue yendo tambien a sin_asignar como antes (nivel1=ESTADO nunca matchea
     ninguna CCAA), y ademas se agrega aqui si concesiones_aecid no es None."""
+    fila_id = fila.get("id")
+    if fila_id is not None:
+        if fila_id in ids_vistos:
+            return True
+        ids_vistos.add(fila_id)
+
     if concesiones_aecid is not None and es_concesion_aecid(fila):
         concesiones_aecid.append(fila)
 
     codigo_ine = resolver_ccaa(fila)
     if codigo_ine is None:
         sin_asignar.append(fila)
-        return
+        return False
 
     importe = fila.get("importe") or 0.0
 
@@ -202,12 +231,26 @@ def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesion
     )
     acumulado_org["importe_total_eur"] += importe
     acumulado_org["n_concesiones"] += 1
+    return False
+
+
+MAX_PAGINAS_POR_MES = 5000
+# Tope de seguridad (5000 paginas x PAGE_SIZE = 5.000.000 de filas): muy por encima de cualquier mes
+# real visto hasta ahora (Junio 2025, el mayor de los 55 meses backfilleados a esta fecha, tiene
+# 613.563 filas / ~614 paginas), pero acota el dano de un
+# hallazgo real del 2026-09-03: el totalElements/last que devuelve la API de BDNS para
+# /concesiones/busqueda no es fiable a partir de cierto volumen (la misma consulta de un solo dia
+# devolvio 2.147.627 y 48.974 en llamadas distintas, y un rango de mes completo devolvio 6.077.077
+# frente a los 910.382 que mostraba la web horas antes). Sin este tope, un mes donde ese conteo se
+# desestabiliza puede paginar indefinidamente sin terminar nunca. Si se llega a este tope es senal de
+# que el problema esta activo, no de que el mes sea genuinamente enorme -- investigar antes de subir
+# el numero.
 
 
 def procesar_mes(
     anio, mes, client, raw_writer,
     totales_ccaa=None, totales_organismo=None, sin_asignar=None, concesiones_aecid=None,
-    pagina_inicial=0,
+    ids_vistos=None, pagina_inicial=0,
 ):
     """Pagina /concesiones/busqueda desde pagina_inicial (0 por defecto, es decir el mes completo)
     hasta el final, agrega por CCAA y por organismo dentro de cada CCAA, recolecta aparte las
@@ -218,12 +261,19 @@ def procesar_mes(
     archivo (abrirlo, pasarlo aqui, cerrarlo); ver main(). num_paginas permite detectar en los logs
     una respuesta prematuramente truncada por la API.
 
-    Los cuatro acumuladores aceptan valores ya iniciados (en vez de vacios) para retomar un mes
-    cortado a mitad de camino -- ver main() y el flag --continuar: como cada fila ya escrita en el
-    raw de una corrida anterior sigue integra en disco (el gzip se cierra bien incluso si
-    procesar_mes termina en excepcion, solo un kill del proceso lo dejaria a medias), alcanza con
-    re-sumar esas filas y pedir desde pagina_inicial en adelante, en vez de reprocesar el mes entero
-    de nuevo."""
+    El corte de paginacion es unicamente `not data["content"]` (pagina vacia) -- el campo "last" que
+    devuelve la API se ignora deliberadamente desde el 2026-09-03: esta calculado a partir del mismo
+    totalElements que se confirmo poco fiable a este volumen (ver MAX_PAGINAS_POR_MES arriba), asi
+    que confiar en "last" puede cortar la paginacion antes de tiempo (con "last": true en una pagina
+    que en realidad no es la ultima) tanto como no cortarla nunca. Una pagina vacia siempre significa
+    "no hay mas filas que matcheen", venga o no acompanada de un "last" correcto.
+
+    Los cinco acumuladores (incluido ids_vistos, ver _acumular_fila) aceptan valores ya iniciados (en
+    vez de vacios) para retomar un mes cortado a mitad de camino -- ver main() y el flag --continuar:
+    como cada fila ya escrita en el raw de una corrida anterior sigue integra en disco (el gzip se
+    cierra bien incluso si procesar_mes termina en excepcion, solo un kill del proceso lo dejaria a
+    medias), alcanza con re-sumar esas filas y pedir desde pagina_inicial en adelante, en vez de
+    reprocesar el mes entero de nuevo."""
     fecha_desde = f"01/{mes:02d}/{anio}"
     fecha_hasta = f"{ultimo_dia_mes(anio, mes):02d}/{mes:02d}/{anio}"
 
@@ -231,9 +281,11 @@ def procesar_mes(
     totales_organismo = {} if totales_organismo is None else totales_organismo
     sin_asignar = [] if sin_asignar is None else sin_asignar
     concesiones_aecid = [] if concesiones_aecid is None else concesiones_aecid
+    ids_vistos = set() if ids_vistos is None else ids_vistos
 
     page = pagina_inicial
     num_paginas = 0
+    n_duplicados = 0
     while True:
         data = _get_con_reintentos(client, BUSQUEDA_URL, {
             "page": page, "pageSize": PAGE_SIZE,
@@ -243,12 +295,26 @@ def procesar_mes(
 
         for fila in data["content"]:
             raw_writer.write(json.dumps(fila, ensure_ascii=False) + "\n")
-            _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
+            if _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos, concesiones_aecid):
+                n_duplicados += 1
 
-        if data.get("last", True) or not data["content"]:
+        if not data["content"]:
             break
+        if num_paginas >= MAX_PAGINAS_POR_MES:
+            raise SystemExit(
+                f"Se superaron las {MAX_PAGINAS_POR_MES} paginas ({MAX_PAGINAS_POR_MES * PAGE_SIZE} "
+                f"filas) procesando {anio:04d}-{mes:02d} sin que la API devolviera una pagina vacia. "
+                f"Muy por encima de cualquier mes real visto hasta ahora -- ver MAX_PAGINAS_POR_MES. "
+                f"Investigar antes de reintentar (y antes de subir el limite)."
+            )
         page += 1
         time.sleep(PAUSA_ENTRE_PAGINAS)
+
+    if n_duplicados:
+        log.warning(
+            "Se descartaron %d filas duplicadas (mismo id ya visto) procesando %04d-%02d.",
+            n_duplicados, anio, mes,
+        )
 
     return totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, num_paginas
 
@@ -421,11 +487,12 @@ def reprocesar_desde_raw(anio, mes):
     totales_organismo = {}
     sin_asignar = []
     concesiones_aecid = []
+    ids_vistos = set()
     try:
         with gzip.open(raw_path, "rt", encoding="utf-8") as f:
             for linea in f:
                 fila = json.loads(linea)
-                _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
+                _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos, concesiones_aecid)
     except Exception as e:
         raise SystemExit(
             f"{raw_path} esta corrupto o incompleto ({e}) -- probablemente quedo asi por un corte "
@@ -455,37 +522,41 @@ def _cargar_checkpoint(sufijo):
     Si no hay nada que retomar, si el raw existente tiene menos de una pagina completa, o si no se
     puede leer (p.ej. quedo a medias por un kill del proceso, no por una excepcion normal de
     Python), devuelve acumuladores vacios y pagina_inicial=0 -- en esos casos el caller trunca el
-    raw y arranca de cero, exactamente igual que sin --continuar."""
+    raw y arranca de cero, exactamente igual que sin --continuar. El ids_vistos devuelto (ver
+    _acumular_fila) ya incluye los id de todas las filas releidas, para que procesar_mes siga
+    detectando duplicados contra el historial completo del mes, no solo contra lo que se pida a
+    partir de pagina_inicial."""
     raw_path = RAW_DIR / f"{sufijo}.jsonl.gz"
     if not raw_path.exists():
-        return {}, {}, [], [], 0
+        return {}, {}, [], [], set(), 0
 
     totales_ccaa = {}
     totales_organismo = {}
     sin_asignar = []
     concesiones_aecid = []
+    ids_vistos = set()
     n_filas_previas = 0
     try:
         with gzip.open(raw_path, "rt", encoding="utf-8") as f:
             for linea in f:
-                _acumular_fila(json.loads(linea), totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
+                _acumular_fila(json.loads(linea), totales_ccaa, totales_organismo, sin_asignar, ids_vistos, concesiones_aecid)
                 n_filas_previas += 1
     except Exception as e:
         log.warning("No se pudo leer el raw parcial de %s (%s) -- arrancando de cero.", sufijo, e)
-        return {}, {}, [], [], 0
+        return {}, {}, [], [], set(), 0
 
     pagina_inicial = n_filas_previas // PAGE_SIZE
     if pagina_inicial == 0:
         # Menos de una pagina completa en disco -- se descarta y se arranca de cero (el caller
         # trunca el raw), en vez de arriesgarse a contar dos veces esas filas cuando la pagina 0
         # se vuelva a pedir.
-        return {}, {}, [], [], 0
+        return {}, {}, [], [], set(), 0
 
     log.info(
         "Retomando %s desde un raw parcial (%d filas ya en disco, pagina %d)...",
         sufijo, n_filas_previas, pagina_inicial,
     )
-    return totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, pagina_inicial
+    return totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, ids_vistos, pagina_inicial
 
 
 def main():
@@ -513,8 +584,8 @@ def main():
         log.info("Procesando concesiones BDNS de %04d-%02d...", anio, mes)
         RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-        totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, pagina_inicial = (
-            _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], [], 0)
+        totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, ids_vistos, pagina_inicial = (
+            _cargar_checkpoint(sufijo) if args.continuar else ({}, {}, [], [], set(), 0)
         )
         modo_apertura = "at" if pagina_inicial else "wt"
         marcador_completo = _ruta_marcador_completo(sufijo)
@@ -525,13 +596,13 @@ def main():
             # que ahora esta truncado.
             marcador_completo.unlink(missing_ok=True)
 
-        with httpx.Client(timeout=30) as client:
+        with httpx.Client(timeout=HTTPX_TIMEOUT) as client:
             with gzip.open(RAW_DIR / f"{sufijo}.jsonl.gz", modo_apertura, encoding="utf-8") as raw_writer:
                 totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, num_paginas = procesar_mes(
                     anio, mes, client, raw_writer,
                     totales_ccaa=totales_ccaa, totales_organismo=totales_organismo,
                     sin_asignar=sin_asignar, concesiones_aecid=concesiones_aecid,
-                    pagina_inicial=pagina_inicial,
+                    ids_vistos=ids_vistos, pagina_inicial=pagina_inicial,
                 )
         marcador_completo.touch()
         totales_organismo = recortar_top_organismos(totales_organismo)

@@ -47,8 +47,8 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).parent
 OUTPUT_DIR = BACKEND_DIR / "salida_bdns"
 
-REINTENTOS_MES = 3
-PAUSA_ENTRE_REINTENTOS_MES = 30
+REINTENTOS_MES = 5
+PAUSA_ENTRE_REINTENTOS_MES = 60
 
 
 def parse_mes(valor):

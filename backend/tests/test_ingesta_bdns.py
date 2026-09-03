@@ -125,13 +125,14 @@ def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
     monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
     paginas = [
         FakeResponsePagina(content=[
-            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento A", "importe": 100.0},
-            {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento B", "importe": 50.0},
+            {"id": 1, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento A", "importe": 100.0},
+            {"id": 2, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento B", "importe": 50.0},
         ], last=False),
         FakeResponsePagina(content=[
-            {"nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "nivel3": "Cabildo de Tenerife", "importe": 30.0},
-            {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
+            {"id": 3, "nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "nivel3": "Cabildo de Tenerife", "importe": 30.0},
+            {"id": 4, "nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
         ], last=True),
+        FakeResponsePagina(content=[], last=True),
     ]
     client = FakeClientPaginado(paginas)
     raw_writer = io.StringIO()
@@ -153,13 +154,16 @@ def test_procesar_mes_pagina_y_agrega_por_ccaa(monkeypatch):
     }
     assert len(sin_asignar) == 1
     assert sin_asignar[0]["nivel1"] == "ESTATAL"
-    assert num_paginas == 2
+    # Tres pedidos: dos con contenido y uno mas vacio -- el corte es "content" vacio, no "last"
+    # (ver docstring de procesar_mes: "last" se ignora deliberadamente desde el 2026-09-03).
+    assert num_paginas == 3
     assert concesiones_aecid == []
     filas_escritas = [json.loads(linea) for linea in raw_writer.getvalue().splitlines()]
     assert len(filas_escritas) == 4
     assert client.llamadas[0][1]["fechaDesde"] == "01/08/2026"
     assert client.llamadas[0][1]["fechaHasta"] == "31/08/2026"
     assert client.llamadas[1][1]["page"] == 1
+    assert client.llamadas[2][1]["page"] == 2
 
 
 def test_procesar_mes_reintenta_ante_fallo_de_red(monkeypatch):
@@ -203,9 +207,11 @@ def test_procesar_mes_arranca_desde_pagina_inicial_con_acumuladores_previos(monk
 
         def get(self, url, params=None):
             self.llamadas.append(dict(params))
-            return FakeResponsePagina(content=[
-                {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento C", "importe": 10.0},
-            ], last=True)
+            if params["page"] == 5:
+                return FakeResponsePagina(content=[
+                    {"id": 1, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento C", "importe": 10.0},
+                ], last=True)
+            return FakeResponsePagina(content=[], last=True)
 
     client = ClienteDesdePagina5()
     raw_writer = io.StringIO()
@@ -216,10 +222,11 @@ def test_procesar_mes_arranca_desde_pagina_inicial_con_acumuladores_previos(monk
         totales_ccaa=totales_previos, pagina_inicial=5,
     )
 
-    assert len(client.llamadas) == 1
+    assert len(client.llamadas) == 2
     assert client.llamadas[0]["page"] == 5
+    assert client.llamadas[1]["page"] == 6
     assert totales["09"] == {"importe_total_eur": 110.0, "n_concesiones": 2}
-    assert num_paginas == 1
+    assert num_paginas == 2
 
 
 def test_escribir_salidas_crea_los_archivos_agregados(tmp_path, monkeypatch):
@@ -378,7 +385,7 @@ def test_ruta_marcador_completo(tmp_path, monkeypatch):
 def test_cargar_checkpoint_sin_raw_devuelve_vacio(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
 
-    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], 0)
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], set(), 0)
 
 
 def test_cargar_checkpoint_retoma_desde_paginas_completas(tmp_path, monkeypatch):
@@ -386,21 +393,22 @@ def test_cargar_checkpoint_retoma_desde_paginas_completas(tmp_path, monkeypatch)
     monkeypatch.setattr(ingesta_bdns, "PAGE_SIZE", 2)
 
     filas = [
-        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento A", "importe": 10.0},
-        {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento B", "importe": 20.0},
-        {"nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "nivel3": "Cabildo", "importe": 30.0},
-        {"nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
+        {"id": 1, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento A", "importe": 10.0},
+        {"id": 2, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Departamento B", "importe": 20.0},
+        {"id": 3, "nivel1": "LOCAL", "nivel2": "CABILDO DE TENERIFE", "nivel3": "Cabildo", "importe": 30.0},
+        {"id": 4, "nivel1": "ESTATAL", "nivel2": None, "importe": 999.0},
     ]
     with gzip.open(tmp_path / "2026-08.jsonl.gz", "wt", encoding="utf-8") as f:
         for fila in filas:
             f.write(json.dumps(fila, ensure_ascii=False) + "\n")
 
-    totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, pagina_inicial = ingesta_bdns._cargar_checkpoint("2026-08")
+    totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, ids_vistos, pagina_inicial = ingesta_bdns._cargar_checkpoint("2026-08")
 
     assert pagina_inicial == 2  # 4 filas / PAGE_SIZE(2)
     assert totales_ccaa["09"] == {"importe_total_eur": 30.0, "n_concesiones": 2}
     assert totales_ccaa["05"] == {"importe_total_eur": 30.0, "n_concesiones": 1}
     assert len(sin_asignar) == 1
+    assert ids_vistos == {1, 2, 3, 4}
 
 
 def test_cargar_checkpoint_menos_de_una_pagina_completa_arranca_de_cero(tmp_path, monkeypatch):
@@ -411,14 +419,14 @@ def test_cargar_checkpoint_menos_de_una_pagina_completa_arranca_de_cero(tmp_path
             {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "importe": 10.0}, ensure_ascii=False,
         ) + "\n")
 
-    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], 0)
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], set(), 0)
 
 
 def test_cargar_checkpoint_raw_illegible_arranca_de_cero(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "RAW_DIR", tmp_path)
     (tmp_path / "2026-08.jsonl.gz").write_bytes(b"esto no es un gzip valido")
 
-    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], 0)
+    assert ingesta_bdns._cargar_checkpoint("2026-08") == ({}, {}, [], [], set(), 0)
 
 
 def test_reprocesar_desde_raw_lanza_si_no_existe_el_raw(tmp_path, monkeypatch):
@@ -556,24 +564,48 @@ def test_es_concesion_aecid_nivel1_autonomica_no_cuenta_aunque_nivel3_coincida()
 
 
 def test_acumular_fila_agrega_concesiones_aecid_sin_afectar_ccaa():
-    totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid = {}, {}, [], []
+    totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, ids_vistos = {}, {}, [], [], set()
     fila_aecid = {
         "id": 156033296, "nivel1": "ESTADO",
         "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
         "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA. GRANDES BOSQUES 2026 (FUNDECOR)",
         "numeroConvocatoria": "914029", "importe": 56501.4, "fechaConcesion": "2026-07-21",
     }
-    fila_otro_estado = {"nivel1": "ESTADO", "nivel2": None, "importe": 999.0}
-    fila_autonomica = {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0}
+    fila_otro_estado = {"id": 2, "nivel1": "ESTADO", "nivel2": None, "importe": 999.0}
+    fila_autonomica = {"id": 3, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0}
 
     for fila in (fila_aecid, fila_otro_estado, fila_autonomica):
-        ingesta_bdns._acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid)
+        ingesta_bdns._acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos, concesiones_aecid)
 
     assert concesiones_aecid == [fila_aecid]
     # fila_aecid y fila_otro_estado no matchean ninguna CCAA -> ambas van a sin_asignar tambien,
     # sin cambios respecto al comportamiento actual (concesiones_aecid es un canal ADICIONAL).
     assert len(sin_asignar) == 2
     assert totales_ccaa == {"09": {"importe_total_eur": 10.0, "n_concesiones": 1}}
+
+
+def test_acumular_fila_ignora_una_fila_con_id_ya_visto():
+    totales_ccaa, totales_organismo, sin_asignar, ids_vistos = {}, {}, [], set()
+    fila = {"id": 42, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0}
+    fila_duplicada = {"id": 42, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0}
+
+    es_duplicada_1 = ingesta_bdns._acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos)
+    es_duplicada_2 = ingesta_bdns._acumular_fila(fila_duplicada, totales_ccaa, totales_organismo, sin_asignar, ids_vistos)
+
+    assert es_duplicada_1 is False
+    assert es_duplicada_2 is True
+    assert totales_ccaa == {"09": {"importe_total_eur": 10.0, "n_concesiones": 1}}
+
+
+def test_acumular_fila_sin_id_nunca_se_considera_duplicada():
+    totales_ccaa, totales_organismo, sin_asignar, ids_vistos = {}, {}, [], set()
+    fila = {"nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0}
+
+    for _ in range(2):
+        es_duplicada = ingesta_bdns._acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos)
+        assert es_duplicada is False
+
+    assert totales_ccaa == {"09": {"importe_total_eur": 20.0, "n_concesiones": 2}}
 
 
 def test_procesar_mes_agrega_concesiones_aecid(monkeypatch):
@@ -584,7 +616,10 @@ def test_procesar_mes_agrega_concesiones_aecid(monkeypatch):
         "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA", "numeroConvocatoria": "1",
         "importe": 100.0, "fechaConcesion": "2026-07-21",
     }
-    paginas = [FakeResponsePagina(content=[fila_aecid], last=True)]
+    paginas = [
+        FakeResponsePagina(content=[fila_aecid], last=True),
+        FakeResponsePagina(content=[], last=True),
+    ]
     client = FakeClientPaginado(paginas)
     raw_writer = io.StringIO()
 
@@ -593,3 +628,65 @@ def test_procesar_mes_agrega_concesiones_aecid(monkeypatch):
     )
 
     assert concesiones_aecid == [fila_aecid]
+
+
+def test_procesar_mes_ignora_last_y_corta_solo_con_pagina_vacia(monkeypatch):
+    """Regresion del hallazgo 2026-09-03: el "last" que devuelve la API no es fiable a partir de
+    cierto volumen, asi que procesar_mes debe seguir pidiendo paginas aunque "last" diga True,
+    hasta que una pagina realmente vuelva sin contenido."""
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    paginas = [
+        FakeResponsePagina(content=[{"id": 1, "nivel1": "ESTATAL", "nivel2": None, "importe": 1.0}], last=True),
+        FakeResponsePagina(content=[{"id": 2, "nivel1": "ESTATAL", "nivel2": None, "importe": 1.0}], last=True),
+        FakeResponsePagina(content=[], last=False),
+    ]
+    client = FakeClientPaginado(paginas)
+
+    _, _, sin_asignar, _, num_paginas = ingesta_bdns.procesar_mes(2026, 8, client, io.StringIO())
+
+    assert num_paginas == 3
+    assert len(sin_asignar) == 2
+
+
+def test_procesar_mes_deduplica_una_fila_repetida_en_paginas_distintas(monkeypatch):
+    """Regresion del hallazgo 2026-09-03: sin orden explicito, la misma concesion puede aparecer en
+    mas de una pagina si el dataset se reordena mientras se pagina. procesar_mes no debe contarla
+    dos veces."""
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    fila = {"id": 99, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0}
+    paginas = [
+        FakeResponsePagina(content=[fila], last=False),
+        FakeResponsePagina(content=[dict(fila)], last=False),  # misma concesion, pagina distinta
+        FakeResponsePagina(content=[], last=True),
+    ]
+    client = FakeClientPaginado(paginas)
+
+    totales, _, _, _, num_paginas = ingesta_bdns.procesar_mes(2026, 8, client, io.StringIO())
+
+    assert totales == {"09": {"importe_total_eur": 10.0, "n_concesiones": 1}}
+    assert num_paginas == 3
+
+
+def test_procesar_mes_corta_con_systemexit_si_supera_el_tope_de_paginas(monkeypatch):
+    """Regresion del hallazgo 2026-09-03: si la API nunca devuelve una pagina vacia (el conteo
+    totalElements/last se desestabiliza), procesar_mes no debe paginar indefinidamente."""
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ingesta_bdns, "MAX_PAGINAS_POR_MES", 3)
+
+    class ClienteQueNuncaTerminaria:
+        def __init__(self):
+            self.n_llamadas = 0
+
+        def get(self, url, params=None):
+            self.n_llamadas += 1
+            return FakeResponsePagina(
+                content=[{"id": self.n_llamadas, "nivel1": "ESTATAL", "nivel2": None, "importe": 1.0}],
+                last=False,
+            )
+
+    client = ClienteQueNuncaTerminaria()
+
+    with pytest.raises(SystemExit):
+        ingesta_bdns.procesar_mes(2026, 8, client, io.StringIO())
+
+    assert client.n_llamadas == 3
