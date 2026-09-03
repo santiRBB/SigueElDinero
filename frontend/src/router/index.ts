@@ -10,6 +10,7 @@ const router = createRouter({
     { path: '/paises/:iso3', name: 'pais', component: () => import('../views/PaisView.vue') },
     { path: '/ccaa/:codigoIne', name: 'ccaa', component: () => import('../views/CcaaView.vue') },
     { path: '/sobre', name: 'sobre', component: () => import('../views/SobreView.vue') },
+    { path: '/cookies', name: 'cookies', component: () => import('../views/PoliticaCookiesView.vue') },
   ],
   scrollBehavior() {
     return { top: 0 }
