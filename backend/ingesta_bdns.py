@@ -234,17 +234,21 @@ def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_visto
     return False
 
 
-MAX_PAGINAS_POR_MES = 5000
-# Tope de seguridad (5000 paginas x PAGE_SIZE = 5.000.000 de filas): muy por encima de cualquier mes
-# real visto hasta ahora (Junio 2025, el mayor de los 55 meses backfilleados a esta fecha, tiene
-# 613.563 filas / ~614 paginas), pero acota el dano de un
-# hallazgo real del 2026-09-03: el totalElements/last que devuelve la API de BDNS para
-# /concesiones/busqueda no es fiable a partir de cierto volumen (la misma consulta de un solo dia
-# devolvio 2.147.627 y 48.974 en llamadas distintas, y un rango de mes completo devolvio 6.077.077
-# frente a los 910.382 que mostraba la web horas antes). Sin este tope, un mes donde ese conteo se
-# desestabiliza puede paginar indefinidamente sin terminar nunca. Si se llega a este tope es senal de
-# que el problema esta activo, no de que el mes sea genuinamente enorme -- investigar antes de subir
-# el numero.
+MAX_PAGINAS_POR_MES = 20000
+# Tope de seguridad (20000 paginas x PAGE_SIZE = 20.000.000 de filas). No es un numero fino: el
+# 2026-09-03 se vio que /concesiones/busqueda?fechaDesde=01/12/2025&fechaHasta=31/12/2025 devolvio
+# 910.382, luego 6.077.077, y una consulta de un solo dia devolvio 2.147.627 y 48.974 en llamadas
+# distintas -- pero tambien se vio que el 6.077.077 se repitio casi exacto (6.077.068) horas despues
+# desde la propia web, y que la lectura mas baja (910.382 y el "107 paginas" posterior) pudo tener
+# algun filtro extra aplicado sin querer (paso de verdad con un filtro de "Partidos politicos" que se
+# colo en una de esas capturas). Osea: no hay certeza de si diciembre 2025 es un mes genuinamente
+# enorme (varios millones de filas reales) o si el conteo de la API sigue siendo poco fiable -- ver
+# docs/superpowers/... o memoria del 2026-09-03 para el detalle. Este tope ya no intenta detectar "el
+# conteo esta roto" (eso dejo de poder afirmarse con confianza); solo evita que un bug real de otro
+# tipo (p.ej. el filtro de fechas fallando del todo, que devuelve el historico completo de BDNS,
+# ~29.5M filas a esta fecha) pagine durante dias sin que nadie se entere. Si un mes real llega a este
+# tope, es mas probable que sea genuinamente ese tipo de bug que un mes normal -- investigar, no
+# simplemente subir el numero.
 
 
 def procesar_mes(
