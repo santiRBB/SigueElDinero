@@ -31,6 +31,11 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/api/paises/resumen")
 def get_resumen(anio: int | None = None, grupo: str | None = None):
     return resumen_paises(anio=anio, grupo=grupo)
