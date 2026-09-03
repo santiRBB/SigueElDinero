@@ -31,6 +31,7 @@ describe('cookieConsent', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('loadAdSense does nothing without a publisher id', () => {
