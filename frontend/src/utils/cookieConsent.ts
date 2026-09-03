@@ -43,6 +43,9 @@ export function loadBuyMeACoffee(): void {
   script.setAttribute('data-position', 'Right')
   script.setAttribute('data-x_margin', '18')
   script.setAttribute('data-y_margin', '18')
+  script.onload = () => {
+    window.dispatchEvent(new Event('DOMContentLoaded'))
+  }
   document.body.appendChild(script)
 }
 

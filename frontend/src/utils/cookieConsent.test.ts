@@ -63,6 +63,18 @@ describe('cookieConsent', () => {
     expect(script?.getAttribute('data-y_margin')).toBe('18')
   })
 
+  it('loadBuyMeACoffee dispatches a synthetic DOMContentLoaded on window once the script loads, so the widget initializes even though the real DOMContentLoaded already fired before the script was injected', () => {
+    const listener = vi.fn()
+    window.addEventListener('DOMContentLoaded', listener)
+
+    loadBuyMeACoffee()
+    const script = document.querySelector('script[data-cc-script="bmc"]') as HTMLScriptElement
+    script.onload?.(new Event('load'))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener('DOMContentLoaded', listener)
+  })
+
   it('handleConsentUpdate does not load anything when no category is accepted', () => {
     handleConsentUpdate()
     expect(adsConsent.value).toBe(false)
