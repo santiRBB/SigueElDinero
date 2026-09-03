@@ -42,12 +42,12 @@ watch(adsConsent, (accepted) => {
 .ad-slot {
   display: none;
 }
-@media (min-width: 1024px) {
+@media (min-width: 1760px) {
   .ad-slot {
     display: block;
     position: fixed;
     right: 24px;
-    bottom: 24px;
+    bottom: 96px;
     width: 280px;
     z-index: 15;
   }

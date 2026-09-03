@@ -24,6 +24,8 @@ describe('AdSlot', () => {
 
   afterEach(() => {
     if (wrapper) wrapper.unmount()
+    vi.unstubAllEnvs()
+    vi.clearAllMocks()
   })
 
   it('shows the consent notice instead of the ad when ads are not accepted', () => {

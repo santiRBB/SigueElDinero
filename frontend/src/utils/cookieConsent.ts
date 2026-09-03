@@ -12,7 +12,13 @@ function getAdSensePublisherId(): string | undefined {
 
 export function loadAdSense(): void {
   const publisherId = getAdSensePublisherId()
-  if (!publisherId || document.querySelector('script[data-cc-script="adsense"]')) return
+  if (!publisherId) {
+    console.warn(
+      'Ad consent was granted but VITE_ADSENSE_PUBLISHER_ID is not configured; AdSense will not load.',
+    )
+    return
+  }
+  if (document.querySelector('script[data-cc-script="adsense"]')) return
 
   const script = document.createElement('script')
   script.async = true

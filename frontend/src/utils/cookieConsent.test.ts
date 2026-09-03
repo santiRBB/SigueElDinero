@@ -12,6 +12,7 @@ import {
   adsConsent,
   supportConsent,
   handleConsentUpdate,
+  initCookieConsent,
   loadAdSense,
   loadBuyMeACoffee,
   openCookiePreferences,
@@ -89,5 +90,13 @@ describe('cookieConsent', () => {
   it('openCookiePreferences delegates to CookieConsent.showPreferences', () => {
     openCookiePreferences()
     expect(CookieConsent.showPreferences).toHaveBeenCalledTimes(1)
+  })
+
+  it('initCookieConsent configures the expected categories and wires onConsent/onChange to handleConsentUpdate', () => {
+    initCookieConsent()
+    const config = vi.mocked(CookieConsent.run).mock.calls[0][0]
+    expect(Object.keys(config.categories)).toEqual(['necessary', 'ads', 'support'])
+    expect(config.onConsent).toBe(handleConsentUpdate)
+    expect(config.onChange).toBe(handleConsentUpdate)
   })
 })
