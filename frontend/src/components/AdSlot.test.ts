@@ -51,4 +51,28 @@ describe('AdSlot', () => {
 
     expect(CookieConsent.showPreferences).toHaveBeenCalledTimes(1)
   })
+
+  it('shows nothing when ads are accepted but ad config is incomplete', () => {
+    adsConsent.value = true
+    vi.stubEnv('VITE_ADSENSE_PUBLISHER_ID', '')
+    vi.stubEnv('VITE_ADSENSE_SLOT_ID', '1234567890')
+    wrapper = mount(AdSlot)
+
+    expect(wrapper.find('ins.adsbygoogle').exists()).toBe(false)
+    expect(wrapper.find('.ad-placeholder').exists()).toBe(false)
+  })
+
+  it('renders ad when consent changes from false to true after mount', async () => {
+    wrapper = mount(AdSlot)
+    expect(wrapper.find('.ad-placeholder').exists()).toBe(true)
+    expect(wrapper.find('ins.adsbygoogle').exists()).toBe(false)
+
+    adsConsent.value = true
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('ins.adsbygoogle').exists()).toBe(true)
+    expect(wrapper.find('.ad-placeholder').exists()).toBe(false)
+    expect(window.adsbygoogle).toHaveLength(1)
+  })
 })
