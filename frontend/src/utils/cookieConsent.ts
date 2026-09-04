@@ -18,13 +18,12 @@ export function loadAdSense(): void {
     )
     return
   }
-  if (document.querySelector('script[data-cc-script="adsense"]')) return
+  if (document.querySelector('script[src*="pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]')) return
 
   const script = document.createElement('script')
   script.async = true
   script.crossOrigin = 'anonymous'
   script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`
-  script.setAttribute('data-cc-script', 'adsense')
   document.head.appendChild(script)
 }
 

@@ -12,6 +12,13 @@ import * as CookieConsent from 'vanilla-cookieconsent'
 import { adsConsent } from '../utils/cookieConsent'
 import AdSlot from './AdSlot.vue'
 
+function stubViewportWidth(matches: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockReturnValue({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+  )
+}
+
 describe('AdSlot', () => {
   let wrapper: any
 
@@ -20,11 +27,13 @@ describe('AdSlot', () => {
     window.adsbygoogle = []
     vi.stubEnv('VITE_ADSENSE_PUBLISHER_ID', 'ca-pub-test123')
     vi.stubEnv('VITE_ADSENSE_SLOT_ID', '1234567890')
+    stubViewportWidth(true)
   })
 
   afterEach(() => {
     if (wrapper) wrapper.unmount()
     vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
 
@@ -76,5 +85,15 @@ describe('AdSlot', () => {
     expect(wrapper.find('ins.adsbygoogle').exists()).toBe(true)
     expect(wrapper.find('.ad-placeholder').exists()).toBe(false)
     expect(window.adsbygoogle).toHaveLength(1)
+  })
+
+  it('does not request an ad below the 1760px breakpoint, since the slot is display:none there and AdSense errors on a zero-width container', async () => {
+    stubViewportWidth(false)
+    adsConsent.value = true
+    wrapper = mount(AdSlot)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('ins.adsbygoogle').exists()).toBe(true)
+    expect(window.adsbygoogle).toHaveLength(0)
   })
 })

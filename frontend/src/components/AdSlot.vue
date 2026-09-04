@@ -7,6 +7,7 @@ const adSlotId = import.meta.env.VITE_ADSENSE_SLOT_ID as string | undefined
 const hasAdConfig = Boolean(adClientId && adSlotId)
 
 function requestAd(): void {
+  if (!window.matchMedia('(min-width: 1760px)').matches) return
   window.adsbygoogle = window.adsbygoogle || []
   window.adsbygoogle.push({})
 }
