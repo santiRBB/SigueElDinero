@@ -24,6 +24,8 @@ const emit = defineEmits<{
 
 const mapaListo = ref(false)
 
+const esTactil = window.matchMedia('(pointer: coarse)').matches
+
 onMounted(() => {
   const topoObjects = (spainTopo as { objects: { autonomous_regions: unknown } }).objects.autonomous_regions
   const geoJson = feature(spainTopo, topoObjects)
@@ -80,7 +82,7 @@ const option = computed(() => ({
     {
       type: 'map' as const,
       map: 'spain',
-      roam: true,
+      roam: esTactil ? 'scale' : true,
       nameProperty: 'name',
       itemStyle: { areaColor: COLOR_SIN_DATOS, borderColor: '#FAF7F0', borderWidth: 0.5 },
       emphasis: { itemStyle: { areaColor: '#C9791C' } },

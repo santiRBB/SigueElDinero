@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
 import { shallowMount } from '@vue/test-utils'
 import VChart from 'vue-echarts'
@@ -8,6 +8,48 @@ import spainTopo from 'es-atlas/es/autonomous_regions.json'
 import SpainMap from './SpainMap.vue'
 
 describe('SpainMap', () => {
+  beforeEach(() => {
+    // Default stub for tests that don't explicitly call stubPointerCoarse
+    if (!window.matchMedia) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+      )
+    }
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function stubPointerCoarse(matches: boolean) {
+    vi.unstubAllGlobals()
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    )
+  }
+
+  it('disables map panning (keeps pinch-zoom) on touch devices so a vertical swipe scrolls the page', async () => {
+    stubPointerCoarse(true)
+    const wrapper = shallowMount(SpainMap, { props: { ccaaResumen: [] } })
+    await nextTick()
+
+    const option = wrapper.findComponent(VChart).props('option') as any
+
+    expect(option.series[0].roam).toBe('scale')
+  })
+
+  it('keeps full pan+zoom roam on non-touch (mouse/trackpad) devices', async () => {
+    stubPointerCoarse(false)
+    const wrapper = shallowMount(SpainMap, { props: { ccaaResumen: [] } })
+    await nextTick()
+
+    const option = wrapper.findComponent(VChart).props('option') as any
+
+    expect(option.series[0].roam).toBe(true)
+  })
+
   it('emits ccaa-click with the codigo_ine of the clicked region', async () => {
     const wrapper = shallowMount(SpainMap, {
       props: { ccaaResumen: [] },
