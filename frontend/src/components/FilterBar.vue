@@ -71,6 +71,12 @@ function onGrupoChange(event: Event) {
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
+@media (max-width: 860px) {
+  .ctl select {
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+}
 .ctl select:focus {
   outline: 2px solid var(--amber);
   outline-offset: 1px;
