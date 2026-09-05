@@ -28,6 +28,7 @@ defineProps<{
   line-height: 1.1;
   color: var(--navy);
   letter-spacing: -0.02em;
+  overflow-wrap: break-word;
 }
 .s-l {
   display: block;

@@ -107,6 +107,9 @@ main {
   border-bottom: 1px solid var(--rule);
   margin: 38px 0 0;
 }
+.stats > * {
+  min-width: 0;
+}
 
 .block {
   padding: 46px 0 0;
