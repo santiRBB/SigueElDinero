@@ -111,4 +111,9 @@ function onClick(params: { name: string }) {
   width: 100%;
   height: 420px;
 }
+@media (max-width: 860px) {
+  .spain-map {
+    height: 300px;
+  }
+}
 </style>

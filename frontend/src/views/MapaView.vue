@@ -55,4 +55,9 @@ function onCountryClick(iso3: string) {
 .mapa-grande {
   min-height: 560px;
 }
+@media (max-width: 860px) {
+  .mapa-grande {
+    min-height: 0;
+  }
+}
 </style>

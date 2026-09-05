@@ -150,4 +150,9 @@ function onClick(params: { name: string }) {
   width: 100%;
   height: 500px;
 }
+@media (max-width: 860px) {
+  .world-map {
+    height: 340px;
+  }
+}
 </style>
