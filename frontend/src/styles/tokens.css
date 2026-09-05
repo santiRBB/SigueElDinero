@@ -137,6 +137,9 @@ main {
   grid-template-columns: 1fr 1fr;
   gap: 52px;
 }
+.cols > * {
+  min-width: 0;
+}
 .note {
   font-size: 13px;
   color: var(--dim);
