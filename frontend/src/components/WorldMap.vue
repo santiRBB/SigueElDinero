@@ -25,6 +25,8 @@ const emit = defineEmits<{
 
 const mapaListo = ref(false)
 
+const esTactil = window.matchMedia('(pointer: coarse)').matches
+
 type Anillo = [number, number][]
 
 // world-atlas deja los anillos de países que cruzan el antimeridiano (Rusia,
@@ -119,7 +121,7 @@ const option = computed(() => ({
     {
       type: 'map' as const,
       map: 'world',
-      roam: true,
+      roam: esTactil ? 'scale' : true,
       nameProperty: 'name',
       itemStyle: { areaColor: COLOR_SIN_DATOS, borderColor: '#FAF7F0', borderWidth: 0.5 },
       emphasis: { itemStyle: { areaColor: '#C9791C' } },
