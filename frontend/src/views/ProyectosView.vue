@@ -131,8 +131,11 @@ const totalPaginaActual = computed(() => store.resultadosBusqueda.reduce((acc, p
   cursor: pointer;
 }
 @media (max-width: 860px) {
+  .paginacion {
+    flex-wrap: wrap;
+  }
   .paginacion button {
-    padding: 10px 16px;
+    padding: 10px 12px;
   }
 }
 .paginacion button:disabled {

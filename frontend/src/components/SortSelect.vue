@@ -52,6 +52,7 @@ function onChange(event: Event) {
   .ctl select {
     padding-top: 11px;
     padding-bottom: 11px;
+    background-position: calc(100% - 15px) 19px, calc(100% - 10px) 19px;
   }
 }
 .ctl select:focus {

@@ -46,18 +46,6 @@ function altura(valor: number): number {
   gap: 10px;
   align-items: flex-end;
 }
-@media (max-width: 860px) {
-  .years {
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    padding-bottom: 4px;
-  }
-  .yr {
-    flex: 0 0 auto;
-    min-width: 64px;
-    scroll-snap-align: start;
-  }
-}
 .yr {
   flex: 1;
   background: none;
@@ -71,6 +59,18 @@ function altura(valor: number): number {
   font-family: inherit;
   border-bottom: 1px solid var(--rule);
   text-align: left;
+}
+@media (max-width: 860px) {
+  .years {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 4px;
+  }
+  .yr {
+    flex: 0 0 auto;
+    min-width: 64px;
+    scroll-snap-align: start;
+  }
 }
 .yr-bar {
   display: block;

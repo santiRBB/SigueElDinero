@@ -9,13 +9,11 @@ import SpainMap from './SpainMap.vue'
 
 describe('SpainMap', () => {
   beforeEach(() => {
-    // Default stub for tests that don't explicitly call stubPointerCoarse
-    if (!window.matchMedia) {
-      vi.stubGlobal(
-        'matchMedia',
-        vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
-      )
-    }
+    // jsdom does not implement matchMedia, and SpainMap.vue reads it at setup.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    )
   })
 
   afterEach(() => {
