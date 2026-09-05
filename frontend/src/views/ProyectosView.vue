@@ -101,6 +101,11 @@ const totalPaginaActual = computed(() => store.resultadosBusqueda.reduce((acc, p
   border-bottom: 1px solid var(--ink);
   color: var(--ink);
 }
+@media (max-width: 860px) {
+  .search {
+    min-width: 0;
+  }
+}
 .search:focus {
   outline: 0;
   border-bottom-color: var(--amber);

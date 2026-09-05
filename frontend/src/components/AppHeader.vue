@@ -44,6 +44,12 @@ const links = [
   border: 0;
   text-decoration: none;
 }
+@media (max-width: 860px) {
+  .brand {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+}
 .brand b {
   font-family: 'Newsreader', serif;
   font-weight: 600;
