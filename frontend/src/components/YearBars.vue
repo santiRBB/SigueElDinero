@@ -46,6 +46,18 @@ function altura(valor: number): number {
   gap: 10px;
   align-items: flex-end;
 }
+@media (max-width: 860px) {
+  .years {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 4px;
+  }
+  .yr {
+    flex: 0 0 auto;
+    min-width: 64px;
+    scroll-snap-align: start;
+  }
+}
 .yr {
   flex: 1;
   background: none;
