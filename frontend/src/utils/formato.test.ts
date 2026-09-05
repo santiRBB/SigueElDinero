@@ -23,6 +23,9 @@ describe('formatEURCompacto', () => {
     expect(formatEURCompacto(500)).toContain('500')
     expect(formatEURCompacto(500)).not.toContain('k')
   })
+  it('rounds up to M instead of showing 1000 k', () => {
+    expect(formatEURCompacto(999_600)).toBe('1,0 M €')
+  })
 })
 
 describe('formatPorcentaje', () => {

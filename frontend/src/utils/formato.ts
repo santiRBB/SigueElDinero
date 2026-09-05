@@ -8,7 +8,11 @@ export function formatEUR(valor: number): string {
 export function formatEURCompacto(valor: number): string {
   if (valor >= 1e9) return nfUnDecimal.format(valor / 1e9) + ' MM €'
   if (valor >= 1e6) return nfUnDecimal.format(valor / 1e6) + ' M €'
-  if (valor >= 1e3) return Math.round(valor / 1e3) + ' k €'
+  if (valor >= 1e3) {
+    const miles = Math.round(valor / 1e3)
+    if (miles >= 1000) return nfUnDecimal.format(miles / 1000) + ' M €'
+    return miles + ' k €'
+  }
   return nfEntero.format(valor) + ' €'
 }
 

@@ -110,11 +110,32 @@
     "MURCIA": "14",
     "SANTA COLOMA DE GRAMENET": "09",
     "PICASSENT": "10",
-    "VILAFRANCA DEL PENEDES": "09"
+    "VILAFRANCA DEL PENEDES": "09",
+    "SANT ANTONI DE PORTMANY": "04",
+    "SANT LLORENC DES CARDASSAR": "04",
+    "ALAIOR": "04",
+    "HARIA": "05",
+    "ANTIGUA": "05",
+    "ZUMARRAGA": "16",
+    "IRUN": "16",
+    "ORTUELLA": "16",
+    "CASTELLBISBAL": "09",
+    "SANT VICENC DE TORELLO": "09",
+    "TONA": "09",
+    "VILASSAR DE MAR": "09",
+    "NAVAS": "09",
+    "OURENSE": "12",
+    "CARTAGENA": "14",
+    "ALMASSORA": "10",
+    "ALDEANUEVA DE EBRO": "17",
+    "CAMARGO": "06"
   },
   "local_patron": {
     "consejo insular": {
       "MALLORCA": "04", "MENORCA": "04", "EIVISSA": "04", "IBIZA": "04", "FORMENTERA": "04"
+    },
+    "comarca": {
+      "TERUEL": "02", "SOLSONES": "09"
     },
     "diputacion": {
       "AVILA": "07", "BURGOS": "07", "LEON": "07", "PALENCIA": "07", "SALAMANCA": "07",
