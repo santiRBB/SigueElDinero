@@ -66,14 +66,17 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
       </span>
     </p>
     <p>
-      Cuidado con la palabra "preliminares": no todas están en la misma situación. Para las
-      concesiones de 2024 en adelante es razonable esperar que su actividad IATI aparezca más
-      adelante (se verificó un desfase real de varios meses entre el registro en BDNS y la
-      publicación en IATI). Pero AECID no tiene ninguna actividad publicada en IATI con fecha de
-      inicio anterior al 1 de enero de 2024 — así que las concesiones de BDNS más antiguas (las hay
-      desde 2022) no están realmente "pendientes de publicar": es improbable que lleguen a encontrar
-      su actividad correspondiente algún día, porque ese periodo queda fuera de lo que AECID ha
-      publicado en IATI hasta ahora.
+      Cuidado con la palabra "preliminares": no todas están en la misma situación, y la mayoría
+      probablemente no llegue a publicarse nunca. La mayor parte del importe preliminar corresponde
+      a concesiones anteriores a 2024 — AECID no tiene ninguna actividad publicada en IATI con fecha
+      de inicio anterior al 1 de enero de 2024, así que esas concesiones (las hay desde 2022) no
+      están realmente "pendientes de publicar": ese periodo queda fuera de lo que AECID ha publicado
+      en IATI hasta ahora. Y de las concesiones de 2024 en adelante, donde sí es razonable esperar
+      que su actividad IATI aparezca más tarde (se verificó un desfase real de varios meses entre el
+      registro en BDNS y la publicación en IATI), la mayoría tampoco tiene un país identificado:
+      muchas son contribuciones a fondos multilaterales (el Fondo Global de Lucha contra el Sida,
+      GAVI...) que es poco probable que lleguen a tener una actividad IATI por país concreto. En
+      conjunto, solo una fracción pequeña de lo preliminar está realmente a la espera de publicarse.
     </p>
     <h2>Unidad de medida</h2>
     <p>
@@ -157,7 +160,6 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
 
 <style scoped>
 .prose {
-  max-width: 66ch;
   padding-top: 34px;
 }
 .prose p {
