@@ -7,6 +7,7 @@ from db import (
     anios_disponibles,
     buscar_proyectos,
     ccaa_por_anio,
+    concesiones_aecid_bdns,
     detalle_ccaa,
     detalle_pais,
     pais_por_anio,
@@ -49,6 +50,11 @@ def get_resumen_ccaa(anio: int | None = None):
 @app.get("/api/aecid-bdns/resumen")
 def get_resumen_aecid_bdns():
     return resumen_aecid_bdns()
+
+
+@app.get("/api/aecid-bdns/concesiones")
+def get_concesiones_aecid_bdns(iso_alpha3: str | None = None, pagina: int = 1, por_pagina: int = 30):
+    return concesiones_aecid_bdns(iso_alpha3=iso_alpha3, pagina=pagina, por_pagina=por_pagina)
 
 
 @app.get("/api/ccaa/{codigo_ine}/detalle")

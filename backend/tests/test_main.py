@@ -262,3 +262,39 @@ def test_aecid_bdns_resumen_endpoint(monkeypatch):
 
     assert resp.status_code == 200
     assert resp.json() == fake
+
+
+def test_concesiones_aecid_bdns_endpoint_passes_params(monkeypatch):
+    called_with = {}
+
+    def fake_concesiones(iso_alpha3=None, pagina=1, por_pagina=30):
+        called_with.update({"iso_alpha3": iso_alpha3, "pagina": pagina, "por_pagina": por_pagina})
+        return {"total": 0, "pagina": pagina, "por_pagina": por_pagina, "resultados": []}
+
+    monkeypatch.setattr(main, "concesiones_aecid_bdns", fake_concesiones)
+    client = TestClient(main.app)
+
+    resp = client.get(
+        "/api/aecid-bdns/concesiones",
+        params={"iso_alpha3": "MLI", "pagina": 2, "por_pagina": 10},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"total": 0, "pagina": 2, "por_pagina": 10, "resultados": []}
+    assert called_with == {"iso_alpha3": "MLI", "pagina": 2, "por_pagina": 10}
+
+
+def test_concesiones_aecid_bdns_endpoint_defaults(monkeypatch):
+    called_with = {}
+
+    def fake_concesiones(iso_alpha3=None, pagina=1, por_pagina=30):
+        called_with.update({"iso_alpha3": iso_alpha3, "pagina": pagina, "por_pagina": por_pagina})
+        return {"total": 0, "pagina": pagina, "por_pagina": por_pagina, "resultados": []}
+
+    monkeypatch.setattr(main, "concesiones_aecid_bdns", fake_concesiones)
+    client = TestClient(main.app)
+
+    resp = client.get("/api/aecid-bdns/concesiones")
+
+    assert resp.status_code == 200
+    assert called_with == {"iso_alpha3": None, "pagina": 1, "por_pagina": 30}
