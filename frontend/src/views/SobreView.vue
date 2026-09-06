@@ -1,14 +1,36 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
-import { formatEURCompacto } from '../utils/formato'
+import { formatEUR, formatEURCompacto, formatFecha } from '../utils/formato'
 
+const route = useRoute()
 const store = useGastoStore()
 
 onMounted(() => {
   void store.cargarFiltros()
   if (!store.resumenAecidBdns) void store.cargarResumenAecidBdns()
+  // Siempre se fija explícitamente (a null si no hay query param), para no heredar un filtro de
+  // país que haya quedado puesto en el store desde una visita anterior a /paises/:iso3.
+  const paisQuery = route.query.bdns_pais
+  store.filtroPaisConcesionesAecidBdns = typeof paisQuery === 'string' && paisQuery ? paisQuery : null
+  void store.cargarConcesionesAecidBdns(1)
 })
+
+const opcionesPaisConcesiones = computed(() =>
+  [...(store.resumenAecidBdns?.por_pais ?? [])].sort((a, b) => a.pais_nombre.localeCompare(b.pais_nombre))
+)
+
+function onChangePaisConcesiones(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  void store.setFiltroPaisConcesionesAecidBdns(value || null)
+}
+
+function irAPaginaConcesiones(pagina: number) {
+  void store.cargarConcesionesAecidBdns(pagina)
+}
+
+const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.totalConcesionesAecidBdns / 30)))
 </script>
 
 <template>
@@ -75,6 +97,53 @@ onMounted(() => {
       escala 1:110 millones. Los límites mostrados no implican reconocimiento oficial de fronteras.
     </p>
   </section>
+  <section id="concesiones-bdns" class="block">
+    <div class="block-head">
+      <h2 class="sec-title">Concesiones preliminares (AECID vía BDNS)</h2>
+      <label class="ctl">
+        <span>País</span>
+        <select :value="store.filtroPaisConcesionesAecidBdns ?? ''" @change="onChangePaisConcesiones">
+          <option value="">Todos los países</option>
+          <option value="SIN_PAIS">Sin país identificado</option>
+          <option v-for="p in opcionesPaisConcesiones" :key="p.iso_alpha3" :value="p.iso_alpha3">
+            {{ p.pais_nombre }}
+          </option>
+        </select>
+      </label>
+    </div>
+    <p v-if="store.errorConcesionesAecidBdns" class="error">{{ store.errorConcesionesAecidBdns }}</p>
+    <p v-else-if="store.cargandoConcesionesAecidBdns" class="note">Cargando…</p>
+    <p v-else-if="!store.concesionesAecidBdns.length" class="note">No hay concesiones con este filtro.</p>
+    <div v-else class="tabla-wrap">
+      <table class="tabla-concesiones">
+        <thead>
+          <tr>
+            <th>País</th>
+            <th>Beneficiario</th>
+            <th>Convocatoria</th>
+            <th>Importe</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="c in store.concesionesAecidBdns" :key="c.concesion_id">
+            <td>{{ c.pais_nombre ?? 'Sin país identificado' }}</td>
+            <td>{{ c.beneficiario ?? '—' }}</td>
+            <td>{{ c.titulo ?? '—' }}</td>
+            <td class="t-importe">{{ formatEUR(c.importe_eur) }}</td>
+            <td>{{ formatFecha(c.fecha_concesion) }}</td>
+            <td><a :href="c.url_bdns" target="_blank" rel="noopener">Ver en BDNS ↗</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div v-if="store.totalConcesionesAecidBdns > 30" class="paginacion">
+      <button type="button" :disabled="store.paginaConcesionesAecidBdns <= 1" @click="irAPaginaConcesiones(store.paginaConcesionesAecidBdns - 1)">← Anterior</button>
+      <span>Página {{ store.paginaConcesionesAecidBdns }} de {{ totalPaginasConcesiones }}</span>
+      <button type="button" :disabled="store.paginaConcesionesAecidBdns >= totalPaginasConcesiones" @click="irAPaginaConcesiones(store.paginaConcesionesAecidBdns + 1)">Siguiente →</button>
+    </div>
+  </section>
 </template>
 
 <style scoped>
@@ -93,5 +162,94 @@ onMounted(() => {
   margin: 34px 0 6px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--rule);
+}
+.error {
+  margin: 14px 0 0;
+  padding: 0.5rem 1rem;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ctl span {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ctl select {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 7px 30px 7px 10px;
+  appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 15px, calc(100% - 10px) 15px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.tabla-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+.tabla-concesiones {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tabla-concesiones th {
+  text-align: left;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ink);
+  white-space: nowrap;
+}
+.tabla-concesiones td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule2);
+  vertical-align: top;
+}
+.t-importe {
+  font-variant-numeric: tabular-nums;
+  color: var(--navy);
+  white-space: nowrap;
+}
+.paginacion {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: center;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.paginacion button {
+  font-family: inherit;
+  font-size: 13px;
+  background: none;
+  border: 1px solid var(--ink);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.paginacion button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 </style>
