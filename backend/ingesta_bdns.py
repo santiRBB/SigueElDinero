@@ -37,6 +37,7 @@ import tempfile
 import time
 import unicodedata
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -730,7 +731,17 @@ def _cargar_checkpoint(sufijo):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mes", required=True, help="YYYY-MM")
+    parser.add_argument("--mes", help="YYYY-MM (requerido salvo con --incremental)")
+    parser.add_argument(
+        "--incremental", action="store_true",
+        help="pagina el feed global de BDNS desde --desde-id en vez de un mes fijo (ver "
+             "docs/superpowers/specs/2026-09-06-bdns-ingesta-incremental-design.md)",
+    )
+    parser.add_argument(
+        "--desde-id", type=int,
+        help="ultimo id ya procesado (requerido con --incremental; es solo una pista de corte, la "
+             "fuente de verdad del watermark vive en bdns_ingesta_estado y la actualiza cargar_bdns.py)",
+    )
     parser.add_argument(
         "--desde-raw", action="store_true",
         help="reprocesa desde el raw/*.jsonl.gz ya descargado, sin red (requiere que ya exista)",
@@ -742,6 +753,33 @@ def main():
              "arranca igual que sin este flag.",
     )
     args = parser.parse_args()
+
+    if args.incremental:
+        if args.desde_id is None:
+            parser.error("--incremental requiere --desde-id")
+        with _lock_mes("incremental"):
+            log.info("Procesando incremental BDNS desde id > %d...", args.desde_id)
+            RAW_DIR.mkdir(parents=True, exist_ok=True)
+            fecha = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            with httpx.Client(timeout=HTTPX_TIMEOUT) as client:
+                with gzip.open(RAW_DIR / f"incremental_{fecha}.jsonl.gz", "wt", encoding="utf-8") as raw_writer:
+                    totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, max_id_visto, num_paginas = procesar_incremental(
+                        client, raw_writer, args.desde_id,
+                    )
+            max_id_final = max_id_visto if max_id_visto is not None else args.desde_id
+            escribir_salidas_incremental(fecha, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, max_id_final)
+
+            total_filas = sum(v["n_concesiones"] for v in totales_ccaa.values()) + len(sin_asignar)
+            log.info(
+                "Incremental listo. Filas nuevas: %d | Paginas: %d | Nuevo watermark: %d",
+                total_filas, num_paginas, max_id_final,
+            )
+            log.info("Concesiones de AECID detectadas: %d", len(concesiones_aecid))
+        return
+
+    if not args.mes:
+        parser.error("--mes es requerido salvo con --incremental")
+
     anio, mes = (int(x) for x in args.mes.split("-"))
     sufijo = f"{anio}-{mes:02d}"
 
@@ -759,10 +797,6 @@ def main():
         modo_apertura = "at" if pagina_inicial else "wt"
         marcador_completo = _ruta_marcador_completo(sufijo)
         if modo_apertura == "wt":
-            # Arranque fresco (sin --continuar, o --continuar sin nada que retomar): invalidar
-            # cualquier marcador de una corrida completa anterior antes de truncar el raw, para que un
-            # fallo a mitad de este nuevo intento no deje un marcador "completo" apuntando a un raw
-            # que ahora esta truncado.
             marcador_completo.unlink(missing_ok=True)
 
         with httpx.Client(timeout=HTTPX_TIMEOUT) as client:
