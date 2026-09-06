@@ -2,7 +2,8 @@ name: Ingesta diaria AECID
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # ~04:00 Madrid (CEST) / ~03:00 Madrid (CET) — cron de GH Actions es UTC fijo
+    - cron: '0 2 * * *'  # diario, ~04:00 Madrid (CEST) / ~03:00 Madrid (CET) -- dispara ingest + ingesta-bdns-incremental
+    - cron: '0 3 * * 0'  # domingos, ~05:00 Madrid -- dispara ingesta-bdns-reconciliacion
   workflow_dispatch: {}
 
 jobs:
@@ -22,6 +23,7 @@ jobs:
 
   ingest:
     needs: test
+    if: github.event_name != 'schedule' || github.event.schedule == '0 2 * * *'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -47,8 +49,62 @@ jobs:
             backend/salida_aecid/actividades_sin_pais.jsonl
           retention-days: 14
 
-  ingesta-bdns:
+  ingesta-bdns-incremental:
     needs: test
+    if: github.event_name != 'schedule' || github.event.schedule == '0 2 * * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - name: Leer watermark actual
+        id: watermark
+        run: echo "id=$(python leer_watermark.py)" >> "$GITHUB_OUTPUT"
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Calcular fecha de hoy (UTC)
+        id: fecha
+        run: echo "hoy=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - run: python ingesta_bdns.py --incremental --desde-id ${{ steps.watermark.outputs.id }}
+        working-directory: backend
+      - run: python cargar_bdns.py --incremental
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: python cargar_aecid_bdns.py
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Publicar detalle crudo incremental en GitHub Release
+        working-directory: backend
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "bdns-incremental-${{ steps.fecha.outputs.hoy }}" >/dev/null 2>&1 || \
+            gh release create "bdns-incremental-${{ steps.fecha.outputs.hoy }}" \
+              --title "Concesiones BDNS incrementales ${{ steps.fecha.outputs.hoy }}" \
+              --notes "Detalle crudo de concesiones BDNS nuevas desde la corrida anterior"
+          gh release upload "bdns-incremental-${{ steps.fecha.outputs.hoy }}" \
+            "salida_bdns/raw/incremental_${{ steps.fecha.outputs.hoy }}.jsonl.gz" --clobber
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: salida-bdns-incremental-${{ github.run_id }}
+          path: |
+            backend/salida_bdns/sin_ccaa_asignada_incremental_*.jsonl
+          retention-days: 14
+
+  ingesta-bdns-reconciliacion:
+    needs: test
+    if: github.event_name != 'schedule' || github.event.schedule == '0 3 * * 0'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -92,7 +148,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: salida-bdns-${{ github.run_id }}
+          name: salida-bdns-reconciliacion-${{ github.run_id }}
           path: |
             backend/salida_bdns/sin_ccaa_asignada_*.jsonl
           retention-days: 14
