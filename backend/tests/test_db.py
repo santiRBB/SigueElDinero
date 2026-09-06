@@ -622,6 +622,9 @@ def test_resumen_aecid_bdns_excluye_pais_sin_fila_en_dim_pais(monkeypatch):
 
     por_pais_sql, _ = cursor.executed[0]
     assert "dim_pais" in por_pais_sql
+    # inner join is load-bearing: a country not yet in dim_pais must fall into sin_pais, not
+    # double-count into both buckets
+    assert "left join" not in por_pais_sql.lower()
     sin_pais_sql, _ = cursor.executed[1]
     assert "dim_pais" in sin_pais_sql
     assert result["sin_pais"] == {"importe_eur": 500.0, "n_concesiones": 1}

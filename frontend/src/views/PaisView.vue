@@ -27,6 +27,17 @@ function cargarCcaaSiEspana() {
   if (iso3.value === 'ESP') void store.cargarResumenCcaa()
 }
 
+const concesionesExpandido = ref(false)
+const concesionesTop10 = computed(() => store.concesionesAecidBdns.slice(0, 10))
+
+function onToggleConcesiones() {
+  concesionesExpandido.value = !concesionesExpandido.value
+  if (concesionesExpandido.value) {
+    store.filtroPaisConcesionesAecidBdns = iso3.value
+    void store.cargarConcesionesAecidBdns(1)
+  }
+}
+
 onMounted(() => {
   if (!store.aniosDisponibles.length) void store.cargarFiltros()
   cargarDetalle()
@@ -78,17 +89,6 @@ const preliminarAecidBdns = computed(() =>
   store.resumenAecidBdns?.por_pais.find((p) => p.iso_alpha3 === iso3.value) ?? null
 )
 
-const concesionesExpandido = ref(false)
-const concesionesTop10 = computed(() => store.concesionesAecidBdns.slice(0, 10))
-
-function onToggleConcesiones() {
-  concesionesExpandido.value = !concesionesExpandido.value
-  if (concesionesExpandido.value) {
-    store.filtroPaisConcesionesAecidBdns = iso3.value
-    void store.cargarConcesionesAecidBdns(1)
-  }
-}
-
 function onSelectYear(anio: number) {
   store.setFiltroAnio(store.filtroAnio === anio ? null : anio)
 }
@@ -137,11 +137,12 @@ function onSelectYear(anio: number) {
       </button>
       <ul v-if="concesionesExpandido" class="concesiones-list">
         <li v-if="store.cargandoConcesionesAecidBdns" class="note">Cargando…</li>
+        <li v-else-if="store.errorConcesionesAecidBdns" class="note">{{ store.errorConcesionesAecidBdns }}</li>
         <template v-else>
           <li v-for="c in concesionesTop10" :key="c.concesion_id" class="concesion-item">
             <span class="c-benef">{{ c.beneficiario ?? 'Beneficiario no especificado' }}</span>
             <span class="c-importe">{{ formatEUR(c.importe_eur) }}</span>
-            <span class="c-fecha">{{ formatFecha(c.fecha_concesion) }}</span>
+            <span class="c-fecha">{{ c.fecha_concesion ? formatFecha(c.fecha_concesion) : '—' }}</span>
             <a :href="c.url_bdns" target="_blank" rel="noopener">Ver en BDNS ↗</a>
           </li>
           <li v-if="store.totalConcesionesAecidBdns > 10" class="note">

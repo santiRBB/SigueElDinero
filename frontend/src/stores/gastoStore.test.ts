@@ -223,7 +223,7 @@ describe('gastoStore', () => {
 
   it('cargarResumenAecidBdns loads the preliminary AECID/BDNS summary', async () => {
     const fake = {
-      por_pais: [{ iso_alpha3: 'CRI', importe_eur: 261818.6, n_concesiones: 1 }],
+      por_pais: [{ iso_alpha3: 'CRI', pais_nombre: 'Costa Rica', importe_eur: 261818.6, n_concesiones: 1 }],
       sin_pais: { importe_eur: 50000, n_concesiones: 3 },
     }
     vi.mocked(api.getResumenAecidBdns).mockResolvedValue(fake)
@@ -401,6 +401,30 @@ describe('gastoStore', () => {
 
     expect(store.errorConcesionesAecidBdns).toBe('Error 500')
     expect(store.cargandoConcesionesAecidBdns).toBe(false)
+  })
+
+  it('cargarConcesionesAecidBdns clears stale concesiones/total on failure so a previous country never keeps showing under a new one', async () => {
+    const mockResultado = {
+      total: 1, pagina: 1, por_pagina: 30,
+      resultados: [{
+        concesion_id: 1, beneficiario: 'ONG X', titulo: 'Convocatoria X', importe_eur: 1000,
+        fecha_concesion: '2026-01-01', iso_alpha3: 'MLI', pais_nombre: 'Mali',
+        url_bdns: 'https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/1',
+      }],
+    }
+    vi.mocked(api.getConcesionesAecidBdns).mockResolvedValueOnce(mockResultado as never)
+
+    const store = useGastoStore()
+    await store.cargarConcesionesAecidBdns()
+    expect(store.concesionesAecidBdns).toEqual(mockResultado.resultados)
+    expect(store.totalConcesionesAecidBdns).toBe(1)
+
+    vi.mocked(api.getConcesionesAecidBdns).mockRejectedValueOnce(new Error('Error de red'))
+    await store.cargarConcesionesAecidBdns()
+
+    expect(store.errorConcesionesAecidBdns).toBe('Error de red')
+    expect(store.concesionesAecidBdns).toEqual([])
+    expect(store.totalConcesionesAecidBdns).toBe(0)
   })
 
   it('cargarConcesionesAecidBdns ignores a stale response that resolves after a newer request', async () => {

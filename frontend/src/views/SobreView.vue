@@ -128,11 +128,11 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
         </thead>
         <tbody>
           <tr v-for="c in store.concesionesAecidBdns" :key="c.concesion_id">
-            <td>{{ c.pais_nombre ?? 'Sin país identificado' }}</td>
+            <td>{{ c.pais_nombre ?? c.iso_alpha3 ?? 'Sin país identificado' }}</td>
             <td>{{ c.beneficiario ?? '—' }}</td>
             <td>{{ c.titulo ?? '—' }}</td>
             <td class="t-importe">{{ formatEUR(c.importe_eur) }}</td>
-            <td>{{ formatFecha(c.fecha_concesion) }}</td>
+            <td>{{ c.fecha_concesion ? formatFecha(c.fecha_concesion) : '—' }}</td>
             <td><a :href="c.url_bdns" target="_blank" rel="noopener">Ver en BDNS ↗</a></td>
           </tr>
         </tbody>
@@ -169,13 +169,6 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
   background: #fee2e2;
   color: #b91c1c;
 }
-.block-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-  flex-wrap: wrap;
-}
 .ctl {
   display: flex;
   flex-direction: column;
@@ -201,6 +194,17 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
   background-position: calc(100% - 15px) 15px, calc(100% - 10px) 15px;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
+}
+@media (max-width: 860px) {
+  .ctl select {
+    padding-top: 11px;
+    padding-bottom: 11px;
+    background-position: calc(100% - 15px) 19px, calc(100% - 10px) 19px;
+  }
+}
+.ctl select:focus {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
 }
 .tabla-wrap {
   overflow-x: auto;
@@ -251,5 +255,13 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
 .paginacion button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+@media (max-width: 860px) {
+  .paginacion {
+    flex-wrap: wrap;
+  }
+  .paginacion button {
+    padding: 10px 12px;
+  }
 }
 </style>

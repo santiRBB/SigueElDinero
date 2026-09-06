@@ -225,6 +225,8 @@ export const useGastoStore = defineStore('gasto', {
       } catch (e) {
         if (token !== concesionesAecidBdnsRequestToken) return
         this.errorConcesionesAecidBdns = (e as Error).message
+        this.concesionesAecidBdns = []
+        this.totalConcesionesAecidBdns = 0
       } finally {
         if (token === concesionesAecidBdnsRequestToken) {
           this.cargandoConcesionesAecidBdns = false

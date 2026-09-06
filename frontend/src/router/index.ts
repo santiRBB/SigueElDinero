@@ -12,7 +12,10 @@ const router = createRouter({
     { path: '/sobre', name: 'sobre', component: () => import('../views/SobreView.vue') },
     { path: '/cookies', name: 'cookies', component: () => import('../views/PoliticaCookiesView.vue') },
   ],
-  scrollBehavior() {
+  scrollBehavior(to) {
+    if (to.hash && document.querySelector(to.hash)) {
+      return { el: to.hash, top: 80 }
+    }
     return { top: 0 }
   },
 })
