@@ -821,3 +821,56 @@ def test_procesar_incremental_corta_con_systemexit_si_supera_el_tope_de_paginas(
         ingesta_bdns.procesar_incremental(client, io.StringIO(), ultimo_id_procesado=0)
 
     assert client.n_llamadas == 3
+
+
+def test_escribir_salidas_incremental_agrupa_por_anio_mes(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    totales_ccaa = {
+        ("09", 2026, 9): {"importe_total_eur": 150.0, "n_concesiones": 2},
+        ("09", 2026, 7): {"importe_total_eur": 200.0, "n_concesiones": 1},
+    }
+    totales_organismo = {
+        ("09", 2026, 9): {"Depto A": {"importe_total_eur": 150.0, "n_concesiones": 2}},
+    }
+
+    ingesta_bdns.escribir_salidas_incremental("2026-09-06", totales_ccaa, totales_organismo, [], [], max_id_visto=12345)
+
+    with open(tmp_path / "incremental_agregado_ccaa_2026-09-06.jsonl", encoding="utf-8") as f:
+        filas = [json.loads(linea) for linea in f]
+    assert {"codigo_ine": "09", "anio": 2026, "mes": 9, "importe_total_eur": 150.0, "n_concesiones": 2} in filas
+    assert {"codigo_ine": "09", "anio": 2026, "mes": 7, "importe_total_eur": 200.0, "n_concesiones": 1} in filas
+
+    with open(tmp_path / "incremental_agregado_ccaa_organismo_2026-09-06.jsonl", encoding="utf-8") as f:
+        filas_org = [json.loads(linea) for linea in f]
+    assert filas_org == [{
+        "codigo_ine": "09", "anio": 2026, "mes": 9, "organismo": "Depto A",
+        "importe_total_eur": 150.0, "n_concesiones": 2,
+    }]
+
+    assert (tmp_path / "incremental_max_id_2026-09-06.txt").read_text(encoding="utf-8") == "12345"
+
+
+def test_escribir_salidas_incremental_nombre_aecid_matchea_glob_existente(tmp_path, monkeypatch):
+    """cargar_aecid_bdns.py globea 'agregado_aecid_*.jsonl' sin ningun cambio -- el nombre del
+    archivo incremental tiene que caer dentro de ese patron."""
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+    concesiones_aecid = [{
+        "id": 1, "numeroConvocatoria": "914029", "convocatoria": "COSTA RICA proyecto",
+        "beneficiario": "FUNDECOR", "importe": 100.0, "fechaConcesion": "2026-09-05",
+    }]
+
+    ingesta_bdns.escribir_salidas_incremental("2026-09-06", {}, {}, [], concesiones_aecid, max_id_visto=1)
+
+    archivo = tmp_path / "agregado_aecid_incremental-2026-09-06.jsonl"
+    assert archivo.exists()
+    assert list(tmp_path.glob("agregado_aecid_*.jsonl")) == [archivo]
+
+
+def test_escribir_salidas_incremental_sin_filas_nuevas_escribe_archivos_vacios(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    ingesta_bdns.escribir_salidas_incremental("2026-09-06", {}, {}, [], [], max_id_visto=99)
+
+    assert (tmp_path / "incremental_max_id_2026-09-06.txt").read_text(encoding="utf-8") == "99"
+    assert (tmp_path / "incremental_agregado_ccaa_2026-09-06.jsonl").read_text(encoding="utf-8") == ""

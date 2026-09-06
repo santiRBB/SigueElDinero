@@ -521,6 +521,69 @@ def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar, co
     )
 
 
+def escribir_salidas_incremental(fecha, totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, max_id_visto):
+    """Analoga a escribir_salidas, pero para una corrida de procesar_incremental: totales_ccaa y
+    totales_organismo vienen indexados por (codigo_ine, anio, mes) en vez de por un unico mes, y no
+    se aplica recortar_top_organismos -- una porcion diaria pequeña de organismos no es
+    representativa del mes completo, y capearla a top-15 produciria un "OTROS" incorrecto que se
+    sumaria mal en cargar_bdns.py. La reconciliacion semanal (que si ve el mes completo) es quien
+    vuelve a normalizar fact_gasto_ccaa_organismo a top-15+OTROS.
+
+    El nombre del archivo AECID (agregado_aecid_incremental-{fecha}.jsonl) esta elegido a proposito
+    para matchear el glob "agregado_aecid_*.jsonl" que ya usa cargar_aecid_bdns.py sin necesitar
+    ningun cambio en ese script."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    _escribir_atomico(
+        OUTPUT_DIR / f"incremental_agregado_ccaa_{fecha}.jsonl",
+        (
+            json.dumps({
+                "codigo_ine": codigo_ine, "anio": anio, "mes": mes,
+                "importe_total_eur": round(totales["importe_total_eur"], 2),
+                "n_concesiones": totales["n_concesiones"],
+            }, ensure_ascii=False)
+            for (codigo_ine, anio, mes), totales in totales_ccaa.items()
+        ),
+    )
+
+    _escribir_atomico(
+        OUTPUT_DIR / f"incremental_agregado_ccaa_organismo_{fecha}.jsonl",
+        (
+            json.dumps({
+                "codigo_ine": codigo_ine, "anio": anio, "mes": mes,
+                "organismo": organismo,
+                "importe_total_eur": round(totales["importe_total_eur"], 2),
+                "n_concesiones": totales["n_concesiones"],
+            }, ensure_ascii=False)
+            for (codigo_ine, anio, mes), organismos in totales_organismo.items()
+            for organismo, totales in organismos.items()
+        ),
+    )
+
+    _escribir_atomico(
+        OUTPUT_DIR / f"sin_ccaa_asignada_incremental_{fecha}.jsonl",
+        (json.dumps(fila, ensure_ascii=False) for fila in sin_asignar),
+    )
+
+    _escribir_atomico(
+        OUTPUT_DIR / f"agregado_aecid_incremental-{fecha}.jsonl",
+        (
+            json.dumps({
+                "concesion_id": fila.get("id"),
+                "numero_convocatoria": str(fila.get("numeroConvocatoria")),
+                "iso_alpha3": resolver_pais_aecid(fila.get("convocatoria")),
+                "beneficiario": fila.get("beneficiario"),
+                "titulo": fila.get("convocatoria"),
+                "importe_eur": round(fila.get("importe") or 0.0, 2),
+                "fecha_concesion": fila.get("fechaConcesion"),
+            }, ensure_ascii=False)
+            for fila in (concesiones_aecid or [])
+        ),
+    )
+
+    (OUTPUT_DIR / f"incremental_max_id_{fecha}.txt").write_text(str(max_id_visto), encoding="utf-8")
+
+
 def _ruta_marcador_completo(sufijo):
     """Archivo vacio que solo existe cuando procesar_mes termino de paginar un mes entero con
     exito (ver main()). Su ausencia es la unica forma confiable de distinguir un
