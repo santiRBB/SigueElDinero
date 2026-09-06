@@ -5,7 +5,7 @@ import { openCookiePreferences } from '../utils/cookieConsent'
 <template>
   <footer class="site">
     <div class="wrap fr">
-      <span>Datos de cooperación española (AECID/IATI). Esta fase cubre solo el gasto internacional.</span>
+      <span>Datos de cooperación española (AECID/IATI) y subvenciones públicas en España (BDNS).</span>
       <span>Geografía: world-atlas (Natural Earth) · <router-link to="/sobre">Metodología</router-link></span>
       <span>
         <router-link to="/cookies">Política de cookies</router-link> ·
