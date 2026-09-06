@@ -180,6 +180,7 @@ export const useGastoStore = defineStore('gasto', {
     },
     async cargarPaisPorAnio(iso3: string) {
       const token = ++paisPorAnioRequestToken
+      this.paisPorAnio = []
       try {
         const data = await getPaisPorAnio(iso3, this.filtroGrupo ?? undefined)
         if (token !== paisPorAnioRequestToken) return
@@ -191,6 +192,7 @@ export const useGastoStore = defineStore('gasto', {
     },
     async cargarResumenCcaa() {
       const token = ++resumenCcaaRequestToken
+      this.resumenCcaa = []
       try {
         const data = await getResumenCcaa(this.filtroAnio ?? undefined)
         if (token !== resumenCcaaRequestToken) return

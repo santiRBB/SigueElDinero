@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useGastoStore } from '../stores/gastoStore'
 import FilterBar from '../components/FilterBar.vue'
 import ProjectCard from '../components/ProjectCard.vue'
@@ -13,9 +13,13 @@ onMounted(() => {
   void store.buscarProyectos()
 })
 
+let debounceBusqueda: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => clearTimeout(debounceBusqueda))
+
 function onInput(event: Event) {
   store.queryBusqueda = (event.target as HTMLInputElement).value
-  void store.buscarProyectos()
+  clearTimeout(debounceBusqueda)
+  debounceBusqueda = setTimeout(() => void store.buscarProyectos(), 300)
 }
 
 function irAPagina(pagina: number) {

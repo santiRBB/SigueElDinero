@@ -131,6 +131,10 @@ const option = computed(() => ({
 }))
 
 function onClick(params: { name: string }) {
+  // Un puñado de geografías de world-atlas (Kosovo, Somaliland, N. Cyprus) no tienen id numérico
+  // y por tanto no se remapean a un código alpha3 en onMounted -- su name sigue siendo el nombre
+  // original en inglés, no un ISO3 real. Sin este guard, pinchar ahí navegaría a una URL sin sentido.
+  if (!/^[A-Z]{3}$/.test(params.name)) return
   emit('country-click', params.name)
 }
 </script>

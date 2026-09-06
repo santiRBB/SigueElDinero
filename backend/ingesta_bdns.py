@@ -111,7 +111,7 @@ def resolver_ccaa(fila):
             if keyword.upper() not in nivel2_norm:
                 continue
             for lugar, codigo_ine in lugares.items():
-                if lugar in nivel2_norm:
+                if re.search(r"\b" + re.escape(lugar) + r"\b", nivel2_norm):
                     return codigo_ine
         return None
 
@@ -158,6 +158,26 @@ def es_concesion_aecid(fila):
 
 def ultimo_dia_mes(anio, mes):
     return calendar.monthrange(anio, mes)[1]
+
+
+def _parsear_fecha_concesion(fecha_concesion):
+    """(anio, mes) si fecha_concesion tiene pinta de YYYY-MM-... con un mes valido (1-12), o None
+    si esta ausente, truncada o trae un mes fuera de rango -- en cuyo caso la fila debe ir a
+    sin_asignar en vez de corromper el agregado con una clave (codigo_ine, anio, mes) invalida."""
+    fecha_concesion = fecha_concesion or ""
+    if len(fecha_concesion) < 7 or not fecha_concesion[:4].isdigit() or not fecha_concesion[5:7].isdigit():
+        return None
+    anio, mes = int(fecha_concesion[:4]), int(fecha_concesion[5:7])
+    if not (1 <= mes <= 12):
+        return None
+    return anio, mes
+
+
+def _convocatoria_str(fila):
+    """str(fila["numeroConvocatoria"]), sin convertir un valor ausente en el string literal
+    "None" (que rompería la URL de BDNS y el dedup por igualdad exacta contra IATI en db.py)."""
+    valor = fila.get("numeroConvocatoria")
+    return str(valor) if valor is not None else None
 
 
 def _get_con_reintentos(client, url, params):
@@ -255,11 +275,11 @@ def _acumular_fila_incremental(fila, totales_ccaa, totales_organismo, sin_asigna
         sin_asignar.append(fila)
         return False
 
-    fecha_concesion = fila.get("fechaConcesion") or ""
-    if len(fecha_concesion) < 7 or not fecha_concesion[:4].isdigit() or not fecha_concesion[5:7].isdigit():
+    fecha_anio_mes = _parsear_fecha_concesion(fila.get("fechaConcesion"))
+    if fecha_anio_mes is None:
         sin_asignar.append(fila)
         return False
-    anio, mes = int(fecha_concesion[:4]), int(fecha_concesion[5:7])
+    anio, mes = fecha_anio_mes
     clave = (codigo_ine, anio, mes)
 
     importe = fila.get("importe") or 0.0
@@ -513,7 +533,7 @@ def escribir_salidas(anio, mes, totales_ccaa, totales_organismo, sin_asignar, co
         (
             json.dumps({
                 "concesion_id": fila.get("id"),
-                "numero_convocatoria": str(fila.get("numeroConvocatoria")),
+                "numero_convocatoria": _convocatoria_str(fila),
                 "iso_alpha3": resolver_pais_aecid(fila.get("convocatoria")),
                 "beneficiario": fila.get("beneficiario"),
                 "titulo": fila.get("convocatoria"),
@@ -579,7 +599,7 @@ def escribir_salidas_incremental(fecha, totales_ccaa, totales_organismo, sin_asi
         (
             json.dumps({
                 "concesion_id": fila.get("id"),
-                "numero_convocatoria": str(fila.get("numeroConvocatoria")),
+                "numero_convocatoria": _convocatoria_str(fila),
                 "iso_alpha3": resolver_pais_aecid(fila.get("convocatoria")),
                 "beneficiario": fila.get("beneficiario"),
                 "titulo": fila.get("convocatoria"),

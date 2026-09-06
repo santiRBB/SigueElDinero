@@ -336,6 +336,33 @@ def test_buscar_proyectos_returns_total_and_resultados(monkeypatch):
     assert "c.nombre as sector_crs_nombre" in results_sql
 
 
+def test_buscar_proyectos_caps_por_pagina_at_100(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    cursor._responses = [[{"total": 0}], []]
+    cursor._call = 0
+
+    def fetchone():
+        row = cursor._responses[cursor._call][0] if cursor._responses[cursor._call] else None
+        cursor._call += 1
+        return row
+
+    def fetchall():
+        rows = cursor._responses[cursor._call]
+        cursor._call += 1
+        return rows
+
+    cursor.fetchone = fetchone
+    cursor.fetchall = fetchall
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.buscar_proyectos(por_pagina=1_000_000)
+
+    assert result["por_pagina"] == 100
+    _, results_params = cursor.executed[1]
+    assert results_params[-2:] == [100, 0]
+
+
 def test_buscar_proyectos_without_query_text(monkeypatch):
     cursor = FakeCursor(rows=[])
     conn = FakeConnection(cursor)
@@ -730,7 +757,10 @@ def test_concesiones_aecid_bdns_sin_pais_filter(monkeypatch):
     db.concesiones_aecid_bdns(iso_alpha3="SIN_PAIS")
 
     count_sql, count_params = cursor.executed[0]
-    assert "b.iso_alpha3 is null" in count_sql
+    # p.iso_alpha3 (del left join contra dim_pais), no b.iso_alpha3: debe coincidir con la
+    # definicion mas amplia de "sin pais" de resumen_aecid_bdns (NULL o sin fila en dim_pais),
+    # no solo con NULL -- ver test_resumen_aecid_bdns_excluye_pais_sin_fila_en_dim_pais.
+    assert "p.iso_alpha3 is null" in count_sql
     assert count_params == []
 
 

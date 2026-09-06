@@ -27,6 +27,16 @@ describe('WorldMap', () => {
     expect(wrapper.emitted('country-click')).toEqual([['ESP']])
   })
 
+  it('ignores clicks on geographies that never resolved to an ISO3 (e.g. Kosovo, Somaliland, N. Cyprus)', async () => {
+    stubPointerCoarse(false)
+    const wrapper = shallowMount(WorldMap, { props: { paisesResumen: [] } })
+    await nextTick()
+
+    await wrapper.findComponent(VChart).vm.$emit('click', { name: 'Kosovo' })
+
+    expect(wrapper.emitted('country-click')).toBeUndefined()
+  })
+
   it('disables map panning (keeps pinch-zoom) on touch devices so a vertical swipe scrolls the page', async () => {
     stubPointerCoarse(true)
     const wrapper = shallowMount(WorldMap, { props: { paisesResumen: [] } })

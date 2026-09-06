@@ -33,8 +33,7 @@ const concesionesTop10 = computed(() => store.concesionesAecidBdns.slice(0, 10))
 function onToggleConcesiones() {
   concesionesExpandido.value = !concesionesExpandido.value
   if (concesionesExpandido.value) {
-    store.filtroPaisConcesionesAecidBdns = iso3.value
-    void store.cargarConcesionesAecidBdns(1)
+    void store.setFiltroPaisConcesionesAecidBdns(iso3.value)
   }
 }
 

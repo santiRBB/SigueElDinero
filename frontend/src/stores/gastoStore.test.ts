@@ -130,6 +130,23 @@ describe('gastoStore', () => {
     expect(store.paisPorAnio).toEqual(datos)
   })
 
+  it('cargarPaisPorAnio clears stale data immediately so a previous country never flashes under a new one', async () => {
+    const datosPrevios = [{ anio: 2024, importe_eur: 100, n_intervenciones: 2 }]
+    const pending = deferred<typeof datosPrevios>()
+    vi.mocked(api.getPaisPorAnio).mockReturnValue(pending.promise)
+
+    const store = useGastoStore()
+    store.paisPorAnio = datosPrevios
+
+    const call = store.cargarPaisPorAnio('BOL')
+    expect(store.paisPorAnio).toEqual([])
+
+    pending.resolve([{ anio: 2024, importe_eur: 200, n_intervenciones: 3 }])
+    await call
+
+    expect(store.paisPorAnio).toEqual([{ anio: 2024, importe_eur: 200, n_intervenciones: 3 }])
+  })
+
   it('cargarResumenCcaa stores the result', async () => {
     const mockData = [{ codigo_ine: '09', nombre: 'Cataluña', importe_total_eur: 100, n_concesiones: 2 }]
     vi.mocked(api.getResumenCcaa).mockResolvedValue(mockData)
@@ -138,6 +155,23 @@ describe('gastoStore', () => {
     await store.cargarResumenCcaa()
 
     expect(store.resumenCcaa).toEqual(mockData)
+  })
+
+  it('cargarResumenCcaa clears stale data immediately so a previous filter never flashes under a new one', async () => {
+    const datosPrevios = [{ codigo_ine: '09', nombre: 'Cataluña', importe_total_eur: 100, n_concesiones: 2 }]
+    const pending = deferred<typeof datosPrevios>()
+    vi.mocked(api.getResumenCcaa).mockReturnValue(pending.promise)
+
+    const store = useGastoStore()
+    store.resumenCcaa = datosPrevios
+
+    const call = store.cargarResumenCcaa()
+    expect(store.resumenCcaa).toEqual([])
+
+    pending.resolve([{ codigo_ine: '13', nombre: 'Comunidad de Madrid', importe_total_eur: 200, n_concesiones: 3 }])
+    await call
+
+    expect(store.resumenCcaa).toEqual([{ codigo_ine: '13', nombre: 'Comunidad de Madrid', importe_total_eur: 200, n_concesiones: 3 }])
   })
 
   it('cargarResumenCcaa resets resumenCcaa on failure without touching the shared error field', async () => {

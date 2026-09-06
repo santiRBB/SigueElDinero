@@ -347,7 +347,7 @@ def concesiones_aecid_bdns(iso_alpha3: str | None = None, pagina: int = 1, por_p
     """
     params: list = []
     if iso_alpha3 == "SIN_PAIS":
-        base_sql += " and b.iso_alpha3 is null"
+        base_sql += " and p.iso_alpha3 is null"
     elif iso_alpha3 is not None:
         base_sql += " and b.iso_alpha3 = %s"
         params.append(iso_alpha3)
@@ -475,6 +475,7 @@ def buscar_proyectos(
     por_pagina: int = 30,
     orden: str | None = None,
 ) -> dict:
+    por_pagina = min(por_pagina, 100)
     base_sql = """
         from fact_gasto f
         join dim_pais p on p.pais_id = f.pais_id

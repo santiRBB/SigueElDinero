@@ -285,6 +285,27 @@ def test_escribir_salidas_crea_el_archivo_agregado_aecid(tmp_path, monkeypatch):
     }]
 
 
+def test_escribir_salidas_numero_convocatoria_ausente_no_es_string_none(tmp_path, monkeypatch):
+    """Regresion: str(fila.get("numeroConvocatoria")) convertia una convocatoria ausente en el
+    string literal "None", generando una URL de BDNS rota ('.../convocatorias/None') y rompiendo
+    el dedup por igualdad exacta contra IATI en db.py (_NO_PUBLICADO_EN_IATI)."""
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    concesiones_aecid = [{
+        "id": 1, "nivel1": "ESTADO",
+        "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
+        "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA",
+        "numeroConvocatoria": None, "importe": 100.0, "fechaConcesion": "2026-07-21",
+    }]
+
+    ingesta_bdns.escribir_salidas(2026, 8, {}, {}, [], concesiones_aecid)
+
+    aecid_path = tmp_path / "agregado_aecid_2026-08.jsonl"
+    with open(aecid_path, encoding="utf-8") as f:
+        fila = json.loads(f.readline())
+    assert fila["numero_convocatoria"] is None
+
+
 def test_escribir_salidas_no_deja_archivo_final_si_falla_a_mitad(tmp_path, monkeypatch):
     monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
 
@@ -811,6 +832,35 @@ def test_acumular_fila_incremental_fecha_concesion_malformada_no_lanza():
     assert es_duplicada is False
     assert sin_asignar == [fila]
     assert totales_ccaa == {}
+
+
+def test_acumular_fila_incremental_fecha_concesion_mes_fuera_de_rango_no_lanza():
+    """fechaConcesion con un mes fuera de 1-12 (glitch de datos de BDNS) pasaba antes la validacion
+    porque solo se comprobaba que las subcadenas de anio/mes fueran digitos, no que el mes fuera un
+    mes real -- corrompiendo la clave (codigo_ine, anio, mes) del agregado en vez de mandar la fila
+    a sin_asignar como cualquier otra fecha malformada."""
+    totales_ccaa, totales_organismo, sin_asignar, ids_vistos = {}, {}, [], set()
+    fila = {
+        "id": 4, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A",
+        "importe": 10.0, "fechaConcesion": "2026-13-05",
+    }
+
+    es_duplicada = ingesta_bdns._acumular_fila_incremental(
+        fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos,
+    )
+
+    assert es_duplicada is False
+    assert sin_asignar == [fila]
+    assert totales_ccaa == {}
+
+
+def test_resolver_ccaa_local_patron_no_matchea_subcadena():
+    """Regresion: local_patron matcheaba por subcadena simple ('SORIA' in nivel2_norm), asi que un
+    departamento cuyo nombre contiene 'ASESORIA' resolvia por error a la diputacion de Soria (07).
+    resolver_pais_aecid ya se protegia de esta misma clase de bug (ver JORDANIA/CISJORDANIA) con
+    limite de palabra; local_patron debe hacer lo mismo."""
+    fila = {"nivel1": "LOCAL", "nivel2": "DIPUTACION SERVICIO DE ASESORIA JURIDICA"}
+    assert ingesta_bdns.resolver_ccaa(fila) is None
 
 
 def test_procesar_incremental_agrupa_por_codigo_ine_anio_mes(monkeypatch):
