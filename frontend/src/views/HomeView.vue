@@ -18,6 +18,7 @@ onMounted(() => {
     store.cargarResumen(),
     store.cargarResumenPorAnio(),
     store.cargarResumenPorGrupo(),
+    store.cargarResumenAecidBdns(),
   ])
 })
 
@@ -32,6 +33,14 @@ const etiquetaAnio = computed(() => {
   if (store.filtroAnio !== null) return `en ${store.filtroAnio}`
   const primerAnio = store.aniosDisponibles[0]
   return primerAnio ? `desde ${primerAnio}` : 'en el periodo disponible'
+})
+
+const preliminarAecidBdns = computed(() => {
+  const resumen = store.resumenAecidBdns
+  if (!resumen) return null
+  const importe_eur = resumen.por_pais.reduce((acc, p) => acc + p.importe_eur, 0) + resumen.sin_pais.importe_eur
+  const n_concesiones = resumen.por_pais.reduce((acc, p) => acc + p.n_concesiones, 0) + resumen.sin_pais.n_concesiones
+  return { importe_eur, n_concesiones }
 })
 
 const filasPaises = computed(() =>
@@ -74,6 +83,14 @@ function onSelectYear(anio: number) {
     <StatTile :valor="String(nPaises)" etiqueta="Países receptores" />
     <StatTile :valor="grupoTop" etiqueta="Sector con más fondos" />
   </section>
+  <p
+    v-if="preliminarAecidBdns && preliminarAecidBdns.importe_eur > 0 && !store.filtroAnio && !store.filtroGrupo"
+    class="note nota-preliminar"
+  >
+    + {{ formatEURCompacto(preliminarAecidBdns.importe_eur) }} preliminares confirmados por AECID vía
+    BDNS, aún no publicados en IATI ({{ preliminarAecidBdns.n_concesiones }} concesión(es)). Ver
+    <router-link to="/sobre">Sobre los datos</router-link>.
+  </p>
 
   <section class="block">
     <h2 class="sec-title">Por año</h2>
@@ -115,5 +132,8 @@ function onSelectYear(anio: number) {
   position: relative;
   margin-top: 8px;
   background: var(--paper);
+}
+.nota-preliminar {
+  margin-top: -8px;
 }
 </style>
