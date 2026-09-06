@@ -335,6 +335,50 @@ def resumen_aecid_bdns() -> dict:
     return {"por_pais": por_pais, "sin_pais": sin_pais}
 
 
+def concesiones_aecid_bdns(iso_alpha3: str | None = None, pagina: int = 1, por_pagina: int = 30) -> dict:
+    """Concesiones individuales de AECID vistas en BDNS y aun no publicadas en IATI (mismo
+    criterio de dedup que resumen_aecid_bdns), para poder enlazar cada una a su convocatoria en
+    BDNS. iso_alpha3='SIN_PAIS' filtra a las concesiones sin pais identificado; None trae todas."""
+    por_pagina = min(por_pagina, 100)
+    base_sql = f"""
+        from fact_gasto_aecid_bdns b
+        left join dim_pais p on p.iso_alpha3 = b.iso_alpha3
+        where {_NO_PUBLICADO_EN_IATI}
+    """
+    params: list = []
+    if iso_alpha3 == "SIN_PAIS":
+        base_sql += " and b.iso_alpha3 is null"
+    elif iso_alpha3 is not None:
+        base_sql += " and b.iso_alpha3 = %s"
+        params.append(iso_alpha3)
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"select count(*) as total {base_sql}", params)
+            total = cur.fetchone()["total"]
+
+            sql = f"""
+                select b.concesion_id, b.beneficiario, b.titulo, b.importe_eur,
+                       b.fecha_concesion, b.iso_alpha3, p.nombre as pais_nombre,
+                       b.numero_convocatoria
+                {base_sql}
+                order by b.importe_eur desc
+                limit %s offset %s
+            """
+            offset = max(pagina - 1, 0) * por_pagina
+            cur.execute(sql, params + [por_pagina, offset])
+            resultados = cur.fetchall()
+    finally:
+        conn.close()
+
+    for row in resultados:
+        numero_convocatoria = row.pop("numero_convocatoria")
+        row["url_bdns"] = f"https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/{numero_convocatoria}"
+
+    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "resultados": resultados}
+
+
 def resumen_por_anio(grupo: str | None = None) -> list[dict]:
     sql = """
         select extract(year from f.start_date)::int as anio,

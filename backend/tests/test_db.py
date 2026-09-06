@@ -625,3 +625,160 @@ def test_resumen_aecid_bdns_excluye_pais_sin_fila_en_dim_pais(monkeypatch):
     sin_pais_sql, _ = cursor.executed[1]
     assert "dim_pais" in sin_pais_sql
     assert result["sin_pais"] == {"importe_eur": 500.0, "n_concesiones": 1}
+
+
+def test_concesiones_aecid_bdns_returns_total_and_resultados(monkeypatch):
+    fila = {
+        "concesion_id": 155744095, "beneficiario": "UNITED NATIONS-WORLD",
+        "titulo": "PMA 2026 - CONTRIBUCION VOLUNTARIA", "importe_eur": 20000000.0,
+        "fecha_concesion": "2026-07-14", "iso_alpha3": "MLI", "pais_nombre": "Mali",
+        "numero_convocatoria": "921884",
+    }
+
+    class MultiQueryCursor(FakeCursor):
+        def __init__(self):
+            super().__init__(rows=[])
+            self._responses = [[{"total": 1}], [dict(fila)]]
+            self._call = 0
+
+        def fetchone(self):
+            row = self._responses[self._call][0] if self._responses[self._call] else None
+            self._call += 1
+            return row
+
+        def fetchall(self):
+            rows = self._responses[self._call]
+            self._call += 1
+            return rows
+
+    cursor = MultiQueryCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.concesiones_aecid_bdns(iso_alpha3="MLI", pagina=1, por_pagina=30)
+
+    assert result["total"] == 1
+    assert result["pagina"] == 1
+    assert result["por_pagina"] == 30
+    assert result["resultados"] == [{
+        "concesion_id": 155744095, "beneficiario": "UNITED NATIONS-WORLD",
+        "titulo": "PMA 2026 - CONTRIBUCION VOLUNTARIA", "importe_eur": 20000000.0,
+        "fecha_concesion": "2026-07-14", "iso_alpha3": "MLI", "pais_nombre": "Mali",
+        "url_bdns": "https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/921884",
+    }]
+    count_sql, count_params = cursor.executed[0]
+    assert "fact_gasto_aecid_bdns" in count_sql
+    assert "not exists" in count_sql.lower()
+    assert count_params == ["MLI"]
+    results_sql, results_params = cursor.executed[1]
+    assert "order by b.importe_eur desc" in results_sql
+    assert "limit %s offset %s" in results_sql
+    assert results_params == ["MLI", 30, 0]
+
+
+def test_concesiones_aecid_bdns_without_pais_filter(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    cursor._responses = [[{"total": 0}], []]
+    cursor._call = 0
+
+    def fetchone():
+        row = cursor._responses[cursor._call][0] if cursor._responses[cursor._call] else None
+        cursor._call += 1
+        return row
+
+    def fetchall():
+        rows = cursor._responses[cursor._call]
+        cursor._call += 1
+        return rows
+
+    cursor.fetchone = fetchone
+    cursor.fetchall = fetchall
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.concesiones_aecid_bdns()
+
+    count_sql, count_params = cursor.executed[0]
+    assert "b.iso_alpha3 = %s" not in count_sql
+    assert "is null" not in count_sql
+    assert count_params == []
+
+
+def test_concesiones_aecid_bdns_sin_pais_filter(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    cursor._responses = [[{"total": 0}], []]
+    cursor._call = 0
+
+    def fetchone():
+        row = cursor._responses[cursor._call][0] if cursor._responses[cursor._call] else None
+        cursor._call += 1
+        return row
+
+    def fetchall():
+        rows = cursor._responses[cursor._call]
+        cursor._call += 1
+        return rows
+
+    cursor.fetchone = fetchone
+    cursor.fetchall = fetchall
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.concesiones_aecid_bdns(iso_alpha3="SIN_PAIS")
+
+    count_sql, count_params = cursor.executed[0]
+    assert "b.iso_alpha3 is null" in count_sql
+    assert count_params == []
+
+
+def test_concesiones_aecid_bdns_paginates_with_offset(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    cursor._responses = [[{"total": 0}], []]
+    cursor._call = 0
+
+    def fetchone():
+        row = cursor._responses[cursor._call][0] if cursor._responses[cursor._call] else None
+        cursor._call += 1
+        return row
+
+    def fetchall():
+        rows = cursor._responses[cursor._call]
+        cursor._call += 1
+        return rows
+
+    cursor.fetchone = fetchone
+    cursor.fetchall = fetchall
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    db.concesiones_aecid_bdns(pagina=3, por_pagina=10)
+
+    _, results_params = cursor.executed[1]
+    assert results_params[-2:] == [10, 20]
+
+
+def test_concesiones_aecid_bdns_caps_por_pagina_at_100(monkeypatch):
+    cursor = FakeCursor(rows=[])
+    cursor._responses = [[{"total": 0}], []]
+    cursor._call = 0
+
+    def fetchone():
+        row = cursor._responses[cursor._call][0] if cursor._responses[cursor._call] else None
+        cursor._call += 1
+        return row
+
+    def fetchall():
+        rows = cursor._responses[cursor._call]
+        cursor._call += 1
+        return rows
+
+    cursor.fetchone = fetchone
+    cursor.fetchall = fetchall
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.concesiones_aecid_bdns(por_pagina=500)
+
+    assert result["por_pagina"] == 100
+    _, results_params = cursor.executed[1]
+    assert results_params[-2:] == [100, 0]
