@@ -121,3 +121,12 @@ create table if not exists fact_gasto_aecid_bdns (
     fecha_ingesta        timestamptz default now()
 );
 create index if not exists idx_aecid_bdns_pais on fact_gasto_aecid_bdns(iso_alpha3);
+
+-- Watermark del job de ingesta incremental de BDNS (ver
+-- docs/superpowers/specs/2026-09-06-bdns-ingesta-incremental-design.md). Fila unica: nunca se
+-- inserta via ningun script, se siembra a mano una unica vez durante el bootstrap (ver ese spec).
+create table if not exists bdns_ingesta_estado (
+    id                  int primary key default 1 check (id = 1),
+    ultimo_id_procesado bigint not null,
+    fecha_actualizacion timestamptz default now()
+);
