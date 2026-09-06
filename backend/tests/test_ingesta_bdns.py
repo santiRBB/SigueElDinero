@@ -756,6 +756,63 @@ def test_procesar_incremental_pide_varias_paginas_hasta_el_watermark(monkeypatch
     assert num_paginas == 2
 
 
+def test_acumular_fila_incremental_fecha_concesion_faltante_no_lanza(monkeypatch):
+    """Regresion del hallazgo importante: procesar_incremental pagina el feed global sin filtro de
+    fecha, asi que no puede asumir que fechaConcesion siempre viene bien formada como si podia
+    procesar_mes (filtrado por mes). Una fila que resolveria a una CCAA pero trae fechaConcesion
+    None (o ausente) no debe lanzar ValueError y tumbar toda la corrida diaria -- debe mandarse a
+    sin_asignar como cualquier otra fila no asignable, y no sumarse a totales_ccaa."""
+    totales_ccaa, totales_organismo, sin_asignar, ids_vistos = {}, {}, [], set()
+    fila = {
+        "id": 1, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A",
+        "importe": 10.0, "fechaConcesion": None,
+    }
+
+    es_duplicada = ingesta_bdns._acumular_fila_incremental(
+        fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos,
+    )
+
+    assert es_duplicada is False
+    assert sin_asignar == [fila]
+    assert totales_ccaa == {}
+    assert totales_organismo == {}
+
+
+def test_acumular_fila_incremental_fecha_concesion_ausente_no_lanza():
+    """Mismo caso que arriba pero con la clave 'fechaConcesion' directamente ausente del dict (no
+    solo None) -- fila.get("fechaConcesion") or "" cubre ambos, pero se prueba aparte por si acaso."""
+    totales_ccaa, totales_organismo, sin_asignar, ids_vistos = {}, {}, [], set()
+    fila = {
+        "id": 2, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0,
+    }
+
+    es_duplicada = ingesta_bdns._acumular_fila_incremental(
+        fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos,
+    )
+
+    assert es_duplicada is False
+    assert sin_asignar == [fila]
+    assert totales_ccaa == {}
+
+
+def test_acumular_fila_incremental_fecha_concesion_malformada_no_lanza():
+    """fechaConcesion presente pero con un formato inesperado (no YYYY-MM-DD...) -- tampoco debe
+    lanzar."""
+    totales_ccaa, totales_organismo, sin_asignar, ids_vistos = {}, {}, [], set()
+    fila = {
+        "id": 3, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A",
+        "importe": 10.0, "fechaConcesion": "fecha-invalida",
+    }
+
+    es_duplicada = ingesta_bdns._acumular_fila_incremental(
+        fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos,
+    )
+
+    assert es_duplicada is False
+    assert sin_asignar == [fila]
+    assert totales_ccaa == {}
+
+
 def test_procesar_incremental_agrupa_por_codigo_ine_anio_mes(monkeypatch):
     monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
     paginas = [

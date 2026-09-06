@@ -256,6 +256,9 @@ def _acumular_fila_incremental(fila, totales_ccaa, totales_organismo, sin_asigna
         return False
 
     fecha_concesion = fila.get("fechaConcesion") or ""
+    if len(fecha_concesion) < 7 or not fecha_concesion[:4].isdigit() or not fecha_concesion[5:7].isdigit():
+        sin_asignar.append(fila)
+        return False
     anio, mes = int(fecha_concesion[:4]), int(fecha_concesion[5:7])
     clave = (codigo_ine, anio, mes)
 
