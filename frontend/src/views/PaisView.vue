@@ -119,6 +119,14 @@ function onSelectYear(anio: number) {
   </section>
 
   <template v-if="store.detallePais">
+    <section v-if="iso3 === 'ESP'" class="block">
+      <p class="nota-distincion">
+        Estas dos cifras no se suman ni se comparan entre sí: miden cosas distintas y a escalas muy
+        distintas. La de arriba es el conjunto de subvenciones públicas de cualquier tipo concedidas
+        en España (BDNS). La de abajo son programas concretos que gestiona AECID dentro de España —
+        educación para el desarrollo, sensibilización, apoyo a organizaciones — publicados en IATI.
+      </p>
+    </section>
     <h2 v-if="iso3 === 'ESP'" class="sec-title">Cooperación internacional gestionada desde España (AECID)</h2>
     <section class="stats">
       <StatTile :valor="formatEURCompacto(totalPais)" etiqueta="Comprometido con este país" />
@@ -193,6 +201,14 @@ function onSelectYear(anio: number) {
 }
 .nota-preliminar {
   margin-top: -8px;
+}
+.nota-distincion {
+  margin: 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--amber);
+  background: var(--paper2);
+  font-size: 13px;
+  color: var(--ink);
 }
 .concesiones-bdns {
   margin-top: -8px;
