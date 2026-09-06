@@ -569,6 +569,36 @@ def test_resolver_pais_aecid_no_matchea_santa_lucia_de_tirajana():
     assert ingesta_bdns.resolver_pais_aecid(texto) is None
 
 
+def test_resolver_pais_aecid_no_atribuye_contribucion_multirregional_a_un_solo_pais():
+    """Regresion real (concesion 728115, BDNS): "Marruecos, Sahel, America Latina" nombra un pais
+    reconocido (Marruecos) junto a dos regiones que no estan en PAIS_LOOKUP (Sahel, America Latina),
+    enumeradas justo al lado (separadas solo por coma) -- antes de esta guarda se detectaba un unico
+    pais "sin ambiguedad" y se le atribuia el importe completo de la contribucion, quitandole
+    visibilidad al hecho de que en realidad se reparte entre varios destinos."""
+    texto = "OCDE 2023 Contribución voluntaria Marruecos, Sahel, América Latina 2º Exp"
+    assert ingesta_bdns.resolver_pais_aecid(texto) is None
+
+
+def test_resolver_pais_aecid_region_lejos_del_pais_no_descarta_la_atribucion():
+    """Regresion real (concesiones 65273271 y 66813739, BDNS): "LAIF City Life America Latina"
+    es el nombre de un programa, no una enumeracion de destinos -- el pais real (El Salvador,
+    Colombia) aparece decenas de caracteres despues, no pegado a "America Latina" como en el caso
+    de arriba. Una guarda que descartara cualquier mencion de un termino regional en el texto,
+    sin mirar la distancia, le habria quitado a estas filas una atribucion de pais que es correcta
+    y especifica."""
+    texto_salvador = (
+        "Convocatoria Instrumental LAIF City Life America Latina 2022 Preparación del "
+        "Proyecto San Salvador 500, El Salvador"
+    )
+    assert ingesta_bdns.resolver_pais_aecid(texto_salvador) == "SLV"
+
+    texto_colombia = (
+        "Convocatoria Instrumental LAIF City Life America Latina 2022 Preparación del "
+        "Proyecto Los Caños en Barranquilla, Colombia"
+    )
+    assert ingesta_bdns.resolver_pais_aecid(texto_colombia) == "COL"
+
+
 def test_es_concesion_aecid_nivel1_estado_y_nivel3_aecid():
     fila = {"nivel1": "ESTADO", "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo"}
     assert ingesta_bdns.es_concesion_aecid(fila) is True

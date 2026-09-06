@@ -81,6 +81,23 @@ with open(PAIS_LOOKUP_PATH, "r", encoding="utf-8") as f:
 
 _PAIS_LOOKUP_POR_LARGO = sorted(PAIS_LOOKUP.items(), key=lambda kv: len(kv[0]), reverse=True)
 
+# Terminos de region (no de pais individual) vistos en convocatorias AECID reales que enumeran
+# varios destinos junto a un unico pais reconocido en PAIS_LOOKUP, p.ej. "Contribucion voluntaria
+# Marruecos, Sahel, America Latina 2o Exp" (concesion 728115, BDNS) -- como "SAHEL" y "AMERICA
+# LATINA" no son paises, _PAIS_LOOKUP_POR_LARGO solo detecta "MARRUECOS" y la fila se resuelve como
+# si el importe completo fuera solo para Marruecos, cuando en realidad se reparte entre varios
+# destinos. Misma filosofia que las exclusiones de PAIS_LOOKUP: cobertura baja (sin pais) es
+# preferible a atribuir el importe entero a un unico pais equivocado.
+TERMINOS_REGIONALES_AMBIGUOS = ["SAHEL", "AMERICA LATINA"]
+
+# Umbral de distancia (en caracteres del texto normalizado) entre el pais que matcheo y un termino
+# de TERMINOS_REGIONALES_AMBIGUOS para considerarlos "pegados" en una enumeracion. Calibrado contra
+# datos reales de produccion: en la concesion 728115 (el caso que motivo esta guarda), "MARRUECOS"
+# y "SAHEL" quedan a 2 caracteres de distancia (", "); en los LAIF City Life America Latina (p.ej.
+# concesiones 65273271, 66813739), "AMERICA LATINA" es el nombre del programa y el pais real queda
+# a 48-58 caracteres, mucho mas lejos -- 20 separa limpiamente ambos casos con margen de sobra.
+DISTANCIA_MAX_ENUMERACION = 20
+
 NIVEL3_AECID = "AGENCIA ESTATAL AGENCIA ESPAÑOLA DE COOPERACIÓN INTERNACIONAL PARA EL DESARROLLO"
 
 
@@ -130,12 +147,20 @@ def resolver_pais_aecid(texto):
       (GUINEA y GUINEA-BISAU, porque "GUINEA" tambien matchea con limite de palabra ahi mismo:
       el guion es un caracter no alfanumerico) y se descartaria como ambiguo por error.
 
+    Tercera salvaguarda: un termino de TERMINOS_REGIONALES_AMBIGUOS (SAHEL, AMERICA LATINA...)
+    pegado al pais que matcheo -- separado solo por una coma/conjuncion corta, como en "Marruecos,
+    Sahel, America Latina" -- indica que el importe se reparte entre varios destinos enumerados, no
+    que sea enterito para ese pais. La distancia importa: nombres de programa como "LAIF City Life
+    America Latina 2022 ... El Salvador" tambien mencionan la region, pero lejos del pais real (que
+    sigue siendo el destino correcto y especifico de esa fila) -- ver DISTANCIA_MAX_ENUMERACION.
+
     Nunca adivina: cobertura baja es preferible a un pais incorrecto (ver spec)."""
     if not texto:
         return None
     texto_norm = normalizar(texto)
     ocupado = [False] * len(texto_norm)
     paises_encontrados = set()
+    pais_spans = []
     for nombre, iso_alpha3 in _PAIS_LOOKUP_POR_LARGO:
         patron = r"\b" + re.escape(nombre) + r"\b"
         for match in re.finditer(patron, texto_norm):
@@ -145,9 +170,24 @@ def resolver_pais_aecid(texto):
             for i in range(inicio, fin):
                 ocupado[i] = True
             paises_encontrados.add(iso_alpha3)
-    if len(paises_encontrados) == 1:
-        return paises_encontrados.pop()
-    return None
+            pais_spans.append((inicio, fin))
+    if len(paises_encontrados) != 1:
+        return None
+
+    for termino in TERMINOS_REGIONALES_AMBIGUOS:
+        for match_region in re.finditer(r"\b" + re.escape(termino) + r"\b", texto_norm):
+            r_inicio, r_fin = match_region.span()
+            for p_inicio, p_fin in pais_spans:
+                if r_fin <= p_inicio:
+                    distancia = p_inicio - r_fin
+                elif p_fin <= r_inicio:
+                    distancia = r_inicio - p_fin
+                else:
+                    distancia = 0
+                if distancia <= DISTANCIA_MAX_ENUMERACION:
+                    return None
+
+    return paises_encontrados.pop()
 
 
 def es_concesion_aecid(fila):

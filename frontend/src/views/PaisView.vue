@@ -135,7 +135,8 @@ function onSelectYear(anio: number) {
     </section>
     <p v-if="preliminarAecidBdns && preliminarAecidBdns.importe_eur > 0 && !store.filtroAnio && !store.filtroGrupo" class="note nota-preliminar">
       + {{ formatEURCompacto(preliminarAecidBdns.importe_eur) }} preliminares confirmados por AECID vía
-      BDNS, aún no publicados en IATI ({{ preliminarAecidBdns.n_concesiones }} concesión(es)). Ver
+      BDNS sin actividad IATI encontrada ({{ preliminarAecidBdns.n_concesiones }} concesión(es)) — parte
+      son de antes de 2024 y es improbable que lleguen a publicarse en IATI. Ver
       <router-link to="/sobre">Sobre los datos</router-link>.
     </p>
     <div v-if="preliminarAecidBdns && preliminarAecidBdns.importe_eur > 0 && !store.filtroAnio && !store.filtroGrupo" class="concesiones-bdns">

@@ -53,18 +53,27 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
     <p>
       Además, algunas cifras de países muestran una línea "preliminares confirmados por AECID vía
       BDNS": son concesiones que AECID ya registró en la Base de Datos Nacional de Subvenciones,
-      pero que todavía no publicó como actividad en IATI (se verificó un desfase real de varios
-      meses entre ambas). Se muestran aparte de "Comprometido con este país" porque BDNS no declara
-      cómo se reparte un importe entre varios países cuando un proyecto cubre más de uno — a
-      diferencia de IATI, que sí lo hace explícitamente. El país solo se identifica cuando el texto
-      de la convocatoria lo menciona sin ambigüedad; si no, el importe se cuenta igual pero sin
-      asignarlo a ningún país.
+      pero para las que no se encontró la actividad correspondiente en IATI. Se muestran aparte de
+      "Comprometido con este país" porque BDNS no declara cómo se reparte un importe entre varios
+      países cuando un proyecto cubre más de uno — a diferencia de IATI, que sí lo hace
+      explícitamente. El país solo se identifica cuando el texto de la convocatoria lo menciona sin
+      ambigüedad; si no, el importe se cuenta igual pero sin asignarlo a ningún país.
       <span v-if="store.resumenAecidBdns && store.resumenAecidBdns.sin_pais.importe_eur > 0">
         Además, hay {{ formatEURCompacto(store.resumenAecidBdns.sin_pais.importe_eur) }} en
         {{ store.resumenAecidBdns.sin_pais.n_concesiones }} concesión(es) de AECID ya registradas en
         BDNS para las que no se pudo identificar un país sin ambigüedad — no aparecen en ninguna
         ficha de país, pero sí forman parte del total que AECID ya tiene confirmado en BDNS.
       </span>
+    </p>
+    <p>
+      Cuidado con la palabra "preliminares": no todas están en la misma situación. Para las
+      concesiones de 2024 en adelante es razonable esperar que su actividad IATI aparezca más
+      adelante (se verificó un desfase real de varios meses entre el registro en BDNS y la
+      publicación en IATI). Pero AECID no tiene ninguna actividad publicada en IATI con fecha de
+      inicio anterior al 1 de enero de 2024 — así que las concesiones de BDNS más antiguas (las hay
+      desde 2022) no están realmente "pendientes de publicar": es improbable que lleguen a encontrar
+      su actividad correspondiente algún día, porque ese periodo queda fuera de lo que AECID ha
+      publicado en IATI hasta ahora.
     </p>
     <h2>Unidad de medida</h2>
     <p>
