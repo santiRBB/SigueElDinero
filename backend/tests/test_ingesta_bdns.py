@@ -690,3 +690,134 @@ def test_procesar_mes_corta_con_systemexit_si_supera_el_tope_de_paginas(monkeypa
         ingesta_bdns.procesar_mes(2026, 8, client, io.StringIO())
 
     assert client.n_llamadas == 3
+
+
+def test_procesar_incremental_corta_apenas_ve_un_id_ya_procesado(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    paginas = [
+        FakeResponsePagina(content=[
+            {"id": 105, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 100.0, "fechaConcesion": "2026-09-05"},
+            {"id": 104, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 50.0, "fechaConcesion": "2026-09-04"},
+            {"id": 100, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 999.0, "fechaConcesion": "2026-08-01"},
+        ], last=False),
+    ]
+    client = FakeClientPaginado(paginas)
+    raw_writer = io.StringIO()
+
+    totales, totales_org, sin_asignar, concesiones_aecid, max_id_visto, num_paginas = ingesta_bdns.procesar_incremental(
+        client, raw_writer, ultimo_id_procesado=100,
+    )
+
+    assert totales == {("09", 2026, 9): {"importe_total_eur": 150.0, "n_concesiones": 2}}
+    assert max_id_visto == 105
+    assert num_paginas == 1
+    filas_escritas = [json.loads(linea) for linea in raw_writer.getvalue().splitlines()]
+    assert len(filas_escritas) == 2  # la fila con id=100 (ya vista) no se vuelve a escribir al raw
+    assert len(client.llamadas) == 1  # corta sin pedir una segunda pagina
+
+
+def test_procesar_incremental_sin_filas_nuevas_devuelve_max_id_none(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    paginas = [
+        FakeResponsePagina(content=[
+            {"id": 100, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0, "fechaConcesion": "2026-08-01"},
+        ], last=False),
+    ]
+    client = FakeClientPaginado(paginas)
+
+    totales, totales_org, sin_asignar, concesiones_aecid, max_id_visto, num_paginas = ingesta_bdns.procesar_incremental(
+        client, io.StringIO(), ultimo_id_procesado=100,
+    )
+
+    assert totales == {}
+    assert max_id_visto is None
+    assert num_paginas == 1
+
+
+def test_procesar_incremental_pide_varias_paginas_hasta_el_watermark(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    paginas = [
+        FakeResponsePagina(content=[
+            {"id": 3, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 10.0, "fechaConcesion": "2026-09-05"},
+        ], last=False),
+        FakeResponsePagina(content=[
+            {"id": 2, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 20.0, "fechaConcesion": "2026-09-05"},
+            {"id": 1, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 999.0, "fechaConcesion": "2026-09-04"},
+        ], last=False),
+    ]
+    client = FakeClientPaginado(paginas)
+
+    totales, totales_org, sin_asignar, concesiones_aecid, max_id_visto, num_paginas = ingesta_bdns.procesar_incremental(
+        client, io.StringIO(), ultimo_id_procesado=1,
+    )
+
+    assert totales == {("09", 2026, 9): {"importe_total_eur": 30.0, "n_concesiones": 2}}
+    assert max_id_visto == 3
+    assert num_paginas == 2
+
+
+def test_procesar_incremental_agrupa_por_codigo_ine_anio_mes(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    paginas = [
+        FakeResponsePagina(content=[
+            {"id": 10, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 100.0, "fechaConcesion": "2026-09-05"},
+            {"id": 9, "nivel1": "AUTONOMICA", "nivel2": "Cataluña", "nivel3": "Depto A", "importe": 200.0, "fechaConcesion": "2026-07-20"},
+        ], last=False),
+        FakeResponsePagina(content=[], last=False),
+    ]
+    client = FakeClientPaginado(paginas)
+
+    totales, totales_org, sin_asignar, concesiones_aecid, max_id_visto, num_paginas = ingesta_bdns.procesar_incremental(
+        client, io.StringIO(), ultimo_id_procesado=0,
+    )
+
+    assert totales == {
+        ("09", 2026, 9): {"importe_total_eur": 100.0, "n_concesiones": 1},
+        ("09", 2026, 7): {"importe_total_eur": 200.0, "n_concesiones": 1},
+    }
+
+
+def test_procesar_incremental_agrega_concesiones_aecid(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    fila_aecid = {
+        "id": 5, "nivel1": "ESTADO",
+        "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
+        "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA", "numeroConvocatoria": "1",
+        "importe": 100.0, "fechaConcesion": "2026-09-05",
+    }
+    paginas = [
+        FakeResponsePagina(content=[fila_aecid], last=False),
+        FakeResponsePagina(content=[], last=False),
+    ]
+    client = FakeClientPaginado(paginas)
+
+    _, _, sin_asignar, concesiones_aecid, _, _ = ingesta_bdns.procesar_incremental(
+        client, io.StringIO(), ultimo_id_procesado=0,
+    )
+
+    assert concesiones_aecid == [fila_aecid]
+    assert len(sin_asignar) == 1  # ESTADO nunca matchea una CCAA, sigue yendo tambien a sin_asignar
+
+
+def test_procesar_incremental_corta_con_systemexit_si_supera_el_tope_de_paginas(monkeypatch):
+    monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ingesta_bdns, "MAX_PAGINAS_INCREMENTAL", 3)
+
+    class ClienteQueNuncaLlegaAlWatermark:
+        def __init__(self):
+            self.n_llamadas = 0
+
+        def get(self, url, params=None):
+            self.n_llamadas += 1
+            id_fila = 10_000 - self.n_llamadas
+            return FakeResponsePagina(
+                content=[{"id": id_fila, "nivel1": "ESTATAL", "nivel2": None, "importe": 1.0, "fechaConcesion": "2026-09-01"}],
+                last=False,
+            )
+
+    client = ClienteQueNuncaLlegaAlWatermark()
+
+    with pytest.raises(SystemExit):
+        ingesta_bdns.procesar_incremental(client, io.StringIO(), ultimo_id_procesado=0)
+
+    assert client.n_llamadas == 3

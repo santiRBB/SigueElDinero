@@ -234,6 +234,108 @@ def _acumular_fila(fila, totales_ccaa, totales_organismo, sin_asignar, ids_visto
     return False
 
 
+def _acumular_fila_incremental(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos, concesiones_aecid=None):
+    """Igual que _acumular_fila, pero indexa totales_ccaa/totales_organismo por (codigo_ine, anio,
+    mes) en vez de por codigo_ine solo -- necesario porque procesar_incremental no esta acotado a un
+    unico mes: pagina el feed global de BDNS sin filtro de fecha, asi que una misma corrida puede
+    traer filas de meses distintos (esa es justamente la ventaja: una concesion dada de alta hoy con
+    fechaConcesion de hace 3 meses se agrega correctamente a ese mes viejo, no al mes en curso)."""
+    fila_id = fila.get("id")
+    if fila_id is not None:
+        if fila_id in ids_vistos:
+            return True
+        ids_vistos.add(fila_id)
+
+    if concesiones_aecid is not None and es_concesion_aecid(fila):
+        concesiones_aecid.append(fila)
+
+    codigo_ine = resolver_ccaa(fila)
+    if codigo_ine is None:
+        sin_asignar.append(fila)
+        return False
+
+    fecha_concesion = fila.get("fechaConcesion") or ""
+    anio, mes = int(fecha_concesion[:4]), int(fecha_concesion[5:7])
+    clave = (codigo_ine, anio, mes)
+
+    importe = fila.get("importe") or 0.0
+    acumulado = totales_ccaa.setdefault(clave, {"importe_total_eur": 0.0, "n_concesiones": 0})
+    acumulado["importe_total_eur"] += importe
+    acumulado["n_concesiones"] += 1
+
+    organismo = (fila.get("nivel3") or "").strip() or "SIN ORGANISMO"
+    org_dict = totales_organismo.setdefault(clave, {})
+    acumulado_org = org_dict.setdefault(organismo, {"importe_total_eur": 0.0, "n_concesiones": 0})
+    acumulado_org["importe_total_eur"] += importe
+    acumulado_org["n_concesiones"] += 1
+    return False
+
+
+MAX_PAGINAS_INCREMENTAL = 500
+# A diferencia de MAX_PAGINAS_POR_MES (pensado para un mes completo, potencialmente millones de
+# filas), una corrida incremental solo deberia necesitar del orden de decenas a un centenar de
+# paginas por dia (ver docs/superpowers/specs/2026-09-06-bdns-ingesta-incremental-design.md: entre
+# la pagina 0 y la 100 del feed sin filtrar ya se paso de "ayer" a "anteayer" en fechaAlta). Si una
+# corrida incremental supera esto sin llegar al watermark, lo mas probable es un watermark corrompido
+# o sembrado mal -- investigar, no subir el numero a ciegas.
+
+
+def procesar_incremental(client, raw_writer, ultimo_id_procesado):
+    """Pagina /concesiones/busqueda SIN fechaDesde/fechaHasta -- el feed global de BDNS, verificado
+    empiricamente (2026-09-06) estable en orden descendente por id (que se correlaciona con
+    fechaAlta: en la practica, orden de insercion). Corta apenas encuentra una fila con
+    id <= ultimo_id_procesado -- todo lo que sigue en esa pagina y en las siguientes ya fue contado
+    en una corrida anterior, no hace falta seguir pidiendo.
+
+    A diferencia de procesar_mes, los acumuladores quedan indexados por (codigo_ine, anio, mes) en
+    vez de por un unico mes fijo -- ver _acumular_fila_incremental.
+
+    Devuelve (totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, max_id_visto,
+    num_paginas). max_id_visto es el id mas alto encontrado en la corrida (el primero de la pagina 0,
+    por construccion del orden descendente) -- es lo que escribir_salidas_incremental graba para que
+    cargar_bdns.py sepa hasta donde avanzar el watermark en la proxima corrida. Es None si no habia
+    ninguna fila nueva (la corrida no encontro nada por encima de ultimo_id_procesado)."""
+    totales_ccaa = {}
+    totales_organismo = {}
+    sin_asignar = []
+    concesiones_aecid = []
+    ids_vistos = set()
+    max_id_visto = None
+
+    page = 0
+    num_paginas = 0
+    terminado = False
+    while True:
+        data = _get_con_reintentos(client, BUSQUEDA_URL, {"page": page, "pageSize": PAGE_SIZE})
+        num_paginas += 1
+
+        if not data["content"]:
+            break
+
+        for fila in data["content"]:
+            fila_id = fila.get("id")
+            if fila_id is not None and fila_id <= ultimo_id_procesado:
+                terminado = True
+                break
+            if max_id_visto is None:
+                max_id_visto = fila_id
+            raw_writer.write(json.dumps(fila, ensure_ascii=False) + "\n")
+            _acumular_fila_incremental(fila, totales_ccaa, totales_organismo, sin_asignar, ids_vistos, concesiones_aecid)
+
+        if terminado:
+            break
+        if num_paginas >= MAX_PAGINAS_INCREMENTAL:
+            raise SystemExit(
+                f"Se superaron las {MAX_PAGINAS_INCREMENTAL} paginas ({MAX_PAGINAS_INCREMENTAL * PAGE_SIZE} "
+                f"filas) sin llegar al watermark (id={ultimo_id_procesado}). Muy por encima de lo "
+                f"esperado para una corrida diaria -- investigar el watermark antes de reintentar."
+            )
+        page += 1
+        time.sleep(PAUSA_ENTRE_PAGINAS)
+
+    return totales_ccaa, totales_organismo, sin_asignar, concesiones_aecid, max_id_visto, num_paginas
+
+
 MAX_PAGINAS_POR_MES = 20000
 # Tope de seguridad (20000 paginas x PAGE_SIZE = 20.000.000 de filas). No es un numero fino: el
 # 2026-09-03 se vio que /concesiones/busqueda?fechaDesde=01/12/2025&fechaHasta=31/12/2025 devolvio
