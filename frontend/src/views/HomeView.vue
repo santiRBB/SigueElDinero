@@ -85,7 +85,7 @@ function onSelectYear(anio: number) {
   </section>
   <p
     v-if="preliminarAecidBdns && preliminarAecidBdns.importe_eur > 0 && !store.filtroAnio && !store.filtroGrupo"
-    class="note nota-preliminar"
+    class="note"
   >
     + {{ formatEURCompacto(preliminarAecidBdns.importe_eur) }} preliminares confirmados por AECID vía
     BDNS, aún no publicados en IATI ({{ preliminarAecidBdns.n_concesiones }} concesión(es)). Ver
@@ -132,8 +132,5 @@ function onSelectYear(anio: number) {
   position: relative;
   margin-top: 8px;
   background: var(--paper);
-}
-.nota-preliminar {
-  margin-top: -8px;
 }
 </style>

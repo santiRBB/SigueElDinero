@@ -628,7 +628,6 @@ def test_acumular_fila_sin_id_nunca_se_considera_duplicada():
 
     assert totales_ccaa == {"09": {"importe_total_eur": 20.0, "n_concesiones": 2}}
 
-
 def test_procesar_mes_agrega_concesiones_aecid(monkeypatch):
     monkeypatch.setattr(ingesta_bdns.time, "sleep", lambda s: None)
     fila_aecid = {
@@ -972,6 +971,27 @@ def test_escribir_salidas_incremental_nombre_aecid_matchea_glob_existente(tmp_pa
     archivo = tmp_path / "agregado_aecid_incremental-2026-09-06.jsonl"
     assert archivo.exists()
     assert list(tmp_path.glob("agregado_aecid_*.jsonl")) == [archivo]
+
+
+def test_escribir_salidas_incremental_numero_convocatoria_ausente_no_es_string_none(tmp_path, monkeypatch):
+    """Misma regresion que test_escribir_salidas_numero_convocatoria_ausente_no_es_string_none,
+    pero para el escritor incremental -- usa el mismo helper _convocatoria_str en un sitio distinto
+    del codigo, asi que necesita su propia prueba."""
+    monkeypatch.setattr(ingesta_bdns, "OUTPUT_DIR", tmp_path)
+
+    concesiones_aecid = [{
+        "id": 1, "nivel1": "ESTADO",
+        "nivel3": "Agencia Estatal Agencia Española de Cooperación Internacional para el Desarrollo",
+        "beneficiario": "FUNDECOR", "convocatoria": "COSTA RICA",
+        "numeroConvocatoria": None, "importe": 100.0, "fechaConcesion": "2026-07-21",
+    }]
+
+    ingesta_bdns.escribir_salidas_incremental("2026-09-06", {}, {}, [], concesiones_aecid, max_id_visto=1)
+
+    aecid_path = tmp_path / "agregado_aecid_incremental-2026-09-06.jsonl"
+    with open(aecid_path, encoding="utf-8") as f:
+        fila = json.loads(f.readline())
+    assert fila["numero_convocatoria"] is None
 
 
 def test_escribir_salidas_incremental_sin_filas_nuevas_escribe_archivos_vacios(tmp_path, monkeypatch):
