@@ -148,11 +148,15 @@ def cargar_incremental():
 
     No aplica recortar_top_organismos ni ningun tope de "top 15" -- ver la nota en
     escribir_salidas_incremental (ingesta_bdns.py) sobre por que eso solo tiene sentido con
-    visibilidad del mes completo, que es lo que aporta la reconciliacion semanal."""
-    archivos = sorted(SALIDA_DIR.glob("incremental_agregado_ccaa_*.jsonl"))
+    visibilidad del mes completo, que es lo que aporta la reconciliacion semanal. Esa reconciliacion
+    solo reprocesa 2 meses (actual y anterior): el desglose por organismo de meses mas viejos, a los
+    que este modo incremental si puede sumarles filas, puede crecer sin tope con el tiempo sin volver
+    a recortarse a top-15+OTROS. Aceptado por ahora; arreglarlo bien implicaria mover el recorte a la
+    capa de lectura/consulta."""
+    archivos = sorted(SALIDA_DIR.glob("incremental_agregado_ccaa_[0-9]*.jsonl"))
     if not archivos:
         raise SystemExit(
-            f"No hay archivos incremental_agregado_ccaa_*.jsonl en {SALIDA_DIR}. "
+            f"No hay archivos incremental_agregado_ccaa_[0-9]*.jsonl en {SALIDA_DIR}. "
             f"Ejecuta antes ingesta_bdns.py --incremental"
         )
     archivos_max_id = sorted(SALIDA_DIR.glob("incremental_max_id_*.txt"))
