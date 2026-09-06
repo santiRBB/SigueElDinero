@@ -782,3 +782,48 @@ def test_concesiones_aecid_bdns_caps_por_pagina_at_100(monkeypatch):
     assert result["por_pagina"] == 100
     _, results_params = cursor.executed[1]
     assert results_params[-2:] == [100, 0]
+
+
+def test_concesiones_aecid_bdns_uses_left_join_to_include_rows_with_unmatched_pais(monkeypatch):
+    """Regression test: must use LEFT JOIN dim_pais, not INNER JOIN, so that rows with
+    iso_alpha3 set but no matching dim_pais entry are still returned (with pais_nombre=None),
+    not silently dropped."""
+    fila_sin_dim = {
+        "concesion_id": 155744095, "beneficiario": "UNKNOWN ORG",
+        "titulo": "Grant with unmatched country", "importe_eur": 50000.0,
+        "fecha_concesion": "2026-07-14", "iso_alpha3": "XYZ", "pais_nombre": None,
+        "numero_convocatoria": "999999",
+    }
+
+    class MultiQueryCursor(FakeCursor):
+        def __init__(self):
+            super().__init__(rows=[])
+            self._responses = [[{"total": 1}], [dict(fila_sin_dim)]]
+            self._call = 0
+
+        def fetchone(self):
+            row = self._responses[self._call][0] if self._responses[self._call] else None
+            self._call += 1
+            return row
+
+        def fetchall(self):
+            rows = self._responses[self._call]
+            self._call += 1
+            return rows
+
+    cursor = MultiQueryCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(db, "get_connection", lambda: conn)
+
+    result = db.concesiones_aecid_bdns(iso_alpha3="XYZ")
+
+    # Verify the row is returned even though XYZ is not in dim_pais
+    assert result["total"] == 1
+    assert len(result["resultados"]) == 1
+    assert result["resultados"][0]["iso_alpha3"] == "XYZ"
+    assert result["resultados"][0]["pais_nombre"] is None
+    assert result["resultados"][0]["url_bdns"] == "https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/999999"
+
+    # Verify LEFT JOIN is used, not INNER JOIN
+    results_sql, _ = cursor.executed[1]
+    assert "left join dim_pais" in results_sql.lower()
