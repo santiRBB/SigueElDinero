@@ -11,7 +11,7 @@ import BarList from '../components/BarList.vue'
 import FilterBar from '../components/FilterBar.vue'
 import SortSelect from '../components/SortSelect.vue'
 import SpainMap from '../components/SpainMap.vue'
-import { formatEURCompacto, formatPorcentaje } from '../utils/formato'
+import { formatEUR, formatEURCompacto, formatFecha, formatPorcentaje } from '../utils/formato'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,6 +39,7 @@ watch(iso3, () => {
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
   cargarCcaaSiEspana()
+  concesionesExpandido.value = false
 })
 watch(() => store.filtroAnio, () => {
   cargarDetalle()
@@ -76,6 +77,17 @@ const concesionesCcaa = computed(() => store.resumenCcaa.reduce((acc, c) => acc 
 const preliminarAecidBdns = computed(() =>
   store.resumenAecidBdns?.por_pais.find((p) => p.iso_alpha3 === iso3.value) ?? null
 )
+
+const concesionesExpandido = ref(false)
+const concesionesTop10 = computed(() => store.concesionesAecidBdns.slice(0, 10))
+
+function onToggleConcesiones() {
+  concesionesExpandido.value = !concesionesExpandido.value
+  if (concesionesExpandido.value) {
+    store.filtroPaisConcesionesAecidBdns = iso3.value
+    void store.cargarConcesionesAecidBdns(1)
+  }
+}
 
 function onSelectYear(anio: number) {
   store.setFiltroAnio(store.filtroAnio === anio ? null : anio)
@@ -119,6 +131,27 @@ function onSelectYear(anio: number) {
       BDNS, aún no publicados en IATI ({{ preliminarAecidBdns.n_concesiones }} concesión(es)). Ver
       <router-link to="/sobre">Sobre los datos</router-link>.
     </p>
+    <div v-if="preliminarAecidBdns && preliminarAecidBdns.importe_eur > 0 && !store.filtroAnio && !store.filtroGrupo" class="concesiones-bdns">
+      <button type="button" class="btn-toggle-concesiones" @click="onToggleConcesiones">
+        {{ concesionesExpandido ? 'Ocultar concesiones' : `Ver ${preliminarAecidBdns.n_concesiones} concesión(es)` }}
+      </button>
+      <ul v-if="concesionesExpandido" class="concesiones-list">
+        <li v-if="store.cargandoConcesionesAecidBdns" class="note">Cargando…</li>
+        <template v-else>
+          <li v-for="c in concesionesTop10" :key="c.concesion_id" class="concesion-item">
+            <span class="c-benef">{{ c.beneficiario ?? 'Beneficiario no especificado' }}</span>
+            <span class="c-importe">{{ formatEUR(c.importe_eur) }}</span>
+            <span class="c-fecha">{{ formatFecha(c.fecha_concesion) }}</span>
+            <a :href="c.url_bdns" target="_blank" rel="noopener">Ver en BDNS ↗</a>
+          </li>
+          <li v-if="store.totalConcesionesAecidBdns > 10" class="note">
+            <router-link :to="`/sobre?bdns_pais=${iso3}#concesiones-bdns`">
+              Ver las {{ store.totalConcesionesAecidBdns }} en Sobre los datos →
+            </router-link>
+          </li>
+        </template>
+      </ul>
+    </div>
 
     <section class="cols">
       <div class="block">
@@ -159,5 +192,44 @@ function onSelectYear(anio: number) {
 }
 .nota-preliminar {
   margin-top: -8px;
+}
+.concesiones-bdns {
+  margin-top: -8px;
+}
+.btn-toggle-concesiones {
+  font-family: inherit;
+  font-size: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--dim);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.concesiones-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.concesion-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule2);
+  font-size: 13px;
+}
+.c-benef {
+  flex: 1;
+  min-width: 160px;
+}
+.c-importe {
+  font-variant-numeric: tabular-nums;
+  color: var(--navy);
+}
+.c-fecha {
+  color: var(--dim);
+  font-size: 12px;
 }
 </style>
