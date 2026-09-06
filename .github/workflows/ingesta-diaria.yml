@@ -4,7 +4,13 @@ on:
   schedule:
     - cron: '0 2 * * *'  # diario, ~04:00 Madrid (CEST) / ~03:00 Madrid (CET) -- dispara ingest + ingesta-bdns-incremental
     - cron: '0 3 * * 0'  # domingos, ~05:00 Madrid -- dispara ingesta-bdns-reconciliacion
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      job_bdns:
+        description: 'Que job de BDNS correr en un dispatch manual (no aplica a corridas programadas)'
+        type: choice
+        options: [incremental, reconciliacion, ninguno]
+        default: incremental
 
 jobs:
   test:
@@ -51,7 +57,7 @@ jobs:
 
   ingesta-bdns-incremental:
     needs: test
-    if: github.event_name != 'schedule' || github.event.schedule == '0 2 * * *'
+    if: github.event.schedule == '0 2 * * *' || (github.event_name == 'workflow_dispatch' && inputs.job_bdns == 'incremental')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -66,7 +72,9 @@ jobs:
         working-directory: backend
       - name: Leer watermark actual
         id: watermark
-        run: echo "id=$(python leer_watermark.py)" >> "$GITHUB_OUTPUT"
+        run: |
+          id=$(python leer_watermark.py)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -104,7 +112,7 @@ jobs:
 
   ingesta-bdns-reconciliacion:
     needs: test
-    if: github.event_name != 'schedule' || github.event.schedule == '0 3 * * 0'
+    if: github.event.schedule == '0 3 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.job_bdns == 'reconciliacion')
     runs-on: ubuntu-latest
     permissions:
       contents: write
