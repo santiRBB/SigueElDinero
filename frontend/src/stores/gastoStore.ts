@@ -3,6 +3,7 @@ import {
   buscarProyectos as apiBuscarProyectos,
   getAnios,
   getCcaaPorAnio,
+  getConcesionesAecidBdns,
   getDetalleCcaa,
   getDetallePais,
   getPaisPorAnio,
@@ -14,6 +15,7 @@ import {
   getSectores,
 } from '../services/api'
 import type {
+  AecidBdnsConcesion,
   AecidBdnsResumen,
   AnioImporte,
   CcaaAnio,
@@ -37,6 +39,12 @@ interface GastoState {
   detalleCcaaError: string | null
   ccaaPorAnio: CcaaAnio[]
   resumenAecidBdns: AecidBdnsResumen | null
+  concesionesAecidBdns: AecidBdnsConcesion[]
+  totalConcesionesAecidBdns: number
+  paginaConcesionesAecidBdns: number
+  filtroPaisConcesionesAecidBdns: string | null
+  cargandoConcesionesAecidBdns: boolean
+  errorConcesionesAecidBdns: string | null
   aniosDisponibles: number[]
   gruposDisponibles: Grupo[]
   filtroAnio: number | null
@@ -68,6 +76,7 @@ let resumenCcaaRequestToken = 0
 let detalleCcaaRequestToken = 0
 let ccaaPorAnioRequestToken = 0
 let busquedaRequestToken = 0
+let concesionesAecidBdnsRequestToken = 0
 
 export const useGastoStore = defineStore('gasto', {
   state: (): GastoState => ({
@@ -80,6 +89,12 @@ export const useGastoStore = defineStore('gasto', {
     detalleCcaaError: null,
     ccaaPorAnio: [],
     resumenAecidBdns: null,
+    concesionesAecidBdns: [],
+    totalConcesionesAecidBdns: 0,
+    paginaConcesionesAecidBdns: 1,
+    filtroPaisConcesionesAecidBdns: null,
+    cargandoConcesionesAecidBdns: false,
+    errorConcesionesAecidBdns: null,
     aniosDisponibles: [],
     gruposDisponibles: [],
     filtroAnio: null,
@@ -192,6 +207,33 @@ export const useGastoStore = defineStore('gasto', {
       } catch {
         this.resumenAecidBdns = null
       }
+    },
+    async cargarConcesionesAecidBdns(pagina = 1) {
+      const token = ++concesionesAecidBdnsRequestToken
+      this.cargandoConcesionesAecidBdns = true
+      this.errorConcesionesAecidBdns = null
+      try {
+        const data = await getConcesionesAecidBdns({
+          iso_alpha3: this.filtroPaisConcesionesAecidBdns ?? undefined,
+          pagina,
+          por_pagina: 30,
+        })
+        if (token !== concesionesAecidBdnsRequestToken) return
+        this.concesionesAecidBdns = data.resultados
+        this.totalConcesionesAecidBdns = data.total
+        this.paginaConcesionesAecidBdns = data.pagina
+      } catch (e) {
+        if (token !== concesionesAecidBdnsRequestToken) return
+        this.errorConcesionesAecidBdns = (e as Error).message
+      } finally {
+        if (token === concesionesAecidBdnsRequestToken) {
+          this.cargandoConcesionesAecidBdns = false
+        }
+      }
+    },
+    async setFiltroPaisConcesionesAecidBdns(pais: string | null) {
+      this.filtroPaisConcesionesAecidBdns = pais
+      await this.cargarConcesionesAecidBdns(1)
     },
     async seleccionarCcaa(codigoIne: string) {
       const token = ++detalleCcaaRequestToken

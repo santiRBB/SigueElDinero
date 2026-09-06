@@ -368,4 +368,69 @@ describe('gastoStore', () => {
     expect(store.errorBusqueda).toBe('Error 500 al llamar a /api/proyectos/buscar')
     expect(store.cargandoBusqueda).toBe(false)
   })
+
+  it('cargarConcesionesAecidBdns stores results, total, and pagina, and resets loading state', async () => {
+    const mockResultado = {
+      total: 1, pagina: 1, por_pagina: 30,
+      resultados: [{
+        concesion_id: 1, beneficiario: 'ONG X', titulo: 'Convocatoria X', importe_eur: 1000,
+        fecha_concesion: '2026-01-01', iso_alpha3: 'MLI', pais_nombre: 'Mali',
+        url_bdns: 'https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/1',
+      }],
+    }
+    vi.mocked(api.getConcesionesAecidBdns).mockResolvedValue(mockResultado as never)
+
+    const store = useGastoStore()
+    const promise = store.cargarConcesionesAecidBdns()
+    expect(store.cargandoConcesionesAecidBdns).toBe(true)
+    await promise
+
+    expect(store.concesionesAecidBdns).toEqual(mockResultado.resultados)
+    expect(store.totalConcesionesAecidBdns).toBe(1)
+    expect(store.paginaConcesionesAecidBdns).toBe(1)
+    expect(store.cargandoConcesionesAecidBdns).toBe(false)
+    expect(store.errorConcesionesAecidBdns).toBeNull()
+    expect(api.getConcesionesAecidBdns).toHaveBeenCalledWith({ iso_alpha3: undefined, pagina: 1, por_pagina: 30 })
+  })
+
+  it('cargarConcesionesAecidBdns records the error message when the API call fails', async () => {
+    vi.mocked(api.getConcesionesAecidBdns).mockRejectedValue(new Error('Error 500'))
+
+    const store = useGastoStore()
+    await store.cargarConcesionesAecidBdns()
+
+    expect(store.errorConcesionesAecidBdns).toBe('Error 500')
+    expect(store.cargandoConcesionesAecidBdns).toBe(false)
+  })
+
+  it('cargarConcesionesAecidBdns ignores a stale response that resolves after a newer request', async () => {
+    const mockFirst = { total: 1, pagina: 1, por_pagina: 30, resultados: [{ concesion_id: 1 }] }
+    const mockSecond = { total: 2, pagina: 1, por_pagina: 30, resultados: [{ concesion_id: 2 }] }
+    const first = deferred<typeof mockFirst>()
+    const second = deferred<typeof mockSecond>()
+
+    vi.mocked(api.getConcesionesAecidBdns).mockImplementationOnce(() => first.promise as never).mockImplementationOnce(() => second.promise as never)
+
+    const store = useGastoStore()
+    const call1 = store.cargarConcesionesAecidBdns()
+    const call2 = store.cargarConcesionesAecidBdns()
+
+    second.resolve(mockSecond)
+    await call2
+    first.resolve(mockFirst)
+    await call1
+
+    expect(store.totalConcesionesAecidBdns).toBe(2)
+  })
+
+  it('setFiltroPaisConcesionesAecidBdns sets the filter and reloads at page 1', async () => {
+    vi.mocked(api.getConcesionesAecidBdns).mockResolvedValue({ total: 0, pagina: 1, por_pagina: 30, resultados: [] } as never)
+
+    const store = useGastoStore()
+    store.paginaConcesionesAecidBdns = 3
+    await store.setFiltroPaisConcesionesAecidBdns('MLI')
+
+    expect(store.filtroPaisConcesionesAecidBdns).toBe('MLI')
+    expect(api.getConcesionesAecidBdns).toHaveBeenCalledWith({ iso_alpha3: 'MLI', pagina: 1, por_pagina: 30 })
+  })
 })
