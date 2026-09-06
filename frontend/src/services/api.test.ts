@@ -3,6 +3,7 @@ import {
   buscarProyectos,
   getAnios,
   getCcaaPorAnio,
+  getConcesionesAecidBdns,
   getDetalleCcaa,
   getDetallePais,
   getPaisPorAnio,
@@ -162,5 +163,36 @@ describe('api service', () => {
     const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
     expect(calledUrl).toContain('/api/ccaa/09/por-anio')
     expect(result).toEqual(datos)
+  })
+
+  it('getConcesionesAecidBdns sends iso_alpha3, pagina, and por_pagina as query params', async () => {
+    const mockResultado = {
+      total: 1, pagina: 1, por_pagina: 30,
+      resultados: [{
+        concesion_id: 155744095, beneficiario: 'UNITED NATIONS-WORLD',
+        titulo: 'PMA 2026', importe_eur: 20000000, fecha_concesion: '2026-07-14',
+        iso_alpha3: 'MLI', pais_nombre: 'Mali',
+        url_bdns: 'https://www.pap.hacienda.gob.es/bdnstrans/GE/es/convocatorias/921884',
+      }],
+    }
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => mockResultado } as Response)
+
+    const result = await getConcesionesAecidBdns({ iso_alpha3: 'MLI', pagina: 2, por_pagina: 10 })
+
+    const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
+    expect(calledUrl).toContain('/api/aecid-bdns/concesiones')
+    expect(calledUrl).toContain('iso_alpha3=MLI')
+    expect(calledUrl).toContain('pagina=2')
+    expect(calledUrl).toContain('por_pagina=10')
+    expect(result).toEqual(mockResultado)
+  })
+
+  it('getConcesionesAecidBdns omits iso_alpha3 when not provided', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ total: 0, pagina: 1, por_pagina: 30, resultados: [] }) } as Response)
+
+    await getConcesionesAecidBdns({})
+
+    const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
+    expect(calledUrl).not.toContain('iso_alpha3=')
   })
 })

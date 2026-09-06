@@ -80,8 +80,27 @@ export interface Grupo {
 
 export interface AecidBdnsPais {
   iso_alpha3: string
+  pais_nombre: string
   importe_eur: number
   n_concesiones: number
+}
+
+export interface AecidBdnsConcesion {
+  concesion_id: number
+  beneficiario: string | null
+  titulo: string | null
+  importe_eur: number
+  fecha_concesion: string | null
+  iso_alpha3: string | null
+  pais_nombre: string | null
+  url_bdns: string
+}
+
+export interface ResultadoConcesionesAecidBdns {
+  total: number
+  pagina: number
+  por_pagina: number
+  resultados: AecidBdnsConcesion[]
 }
 
 export interface AecidBdnsResumen {
@@ -139,6 +158,14 @@ export function getDetalleCcaa(codigoIne: string, anio?: number): Promise<CcaaDe
 
 export function getResumenAecidBdns(): Promise<AecidBdnsResumen> {
   return getJSON<AecidBdnsResumen>('/api/aecid-bdns/resumen')
+}
+
+export function getConcesionesAecidBdns(params: {
+  iso_alpha3?: string
+  pagina?: number
+  por_pagina?: number
+}): Promise<ResultadoConcesionesAecidBdns> {
+  return getJSON<ResultadoConcesionesAecidBdns>('/api/aecid-bdns/concesiones', params)
 }
 
 export function getCcaaPorAnio(codigoIne: string): Promise<CcaaAnio[]> {
