@@ -531,7 +531,12 @@ def escribir_salidas_incremental(fecha, totales_ccaa, totales_organismo, sin_asi
     se aplica recortar_top_organismos -- una porcion diaria pequeña de organismos no es
     representativa del mes completo, y capearla a top-15 produciria un "OTROS" incorrecto que se
     sumaria mal en cargar_bdns.py. La reconciliacion semanal (que si ve el mes completo) es quien
-    vuelve a normalizar fact_gasto_ccaa_organismo a top-15+OTROS.
+    vuelve a normalizar fact_gasto_ccaa_organismo a top-15+OTROS -- pero solo para los 2 meses (actual
+    y anterior) que esa reconciliacion reprocesa. El incremental puede agregar filas de organismo a
+    CUALQUIER mes (ver docstring de arriba), asi que el desglose por organismo de un mes viejo que la
+    reconciliacion ya no revisita puede crecer sin tope con el tiempo, sin volver a recortarse a
+    top-15+OTROS. Aceptado por ahora; arreglarlo bien implicaria mover el recorte a la capa de
+    lectura/consulta, fuera de alcance de este cambio.
 
     El nombre del archivo AECID (agregado_aecid_incremental-{fecha}.jsonl) esta elegido a proposito
     para matchear el glob "agregado_aecid_*.jsonl" que ya usa cargar_aecid_bdns.py sin necesitar
@@ -800,6 +805,10 @@ def main():
         modo_apertura = "at" if pagina_inicial else "wt"
         marcador_completo = _ruta_marcador_completo(sufijo)
         if modo_apertura == "wt":
+            # Arranque fresco (sin --continuar, o --continuar sin nada que retomar): invalidar
+            # cualquier marcador de una corrida completa anterior antes de truncar el raw, para que un
+            # fallo a mitad de este nuevo intento no deje un marcador "completo" apuntando a un raw
+            # que ahora esta truncado.
             marcador_completo.unlink(missing_ok=True)
 
         with httpx.Client(timeout=HTTPX_TIMEOUT) as client:
