@@ -274,6 +274,14 @@ def sectores_disponibles() -> list[dict]:
     ]
 
 
+_NO_PUBLICADO_EN_IATI = """
+    not exists (
+        select 1 from fact_gasto f
+        where split_part(f.url_bdns, '/convocatorias/', 2) = b.numero_convocatoria
+    )
+"""
+
+
 def resumen_aecid_bdns() -> dict:
     """Concesiones de AECID vistas en BDNS que todavia no aparecen publicadas en IATI
     (fact_gasto), agrupadas por pais cuando ese pais ya tiene actividad IATI propia (fila en
@@ -296,33 +304,26 @@ def resumen_aecid_bdns() -> dict:
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                select b.iso_alpha3, b.importe_eur, b.n_concesiones
+            cur.execute(f"""
+                select b.iso_alpha3, p.nombre as pais_nombre, b.importe_eur, b.n_concesiones
                 from (
                     select b.iso_alpha3,
                            sum(b.importe_eur) as importe_eur,
                            count(*) as n_concesiones
                     from fact_gasto_aecid_bdns b
-                    where not exists (
-                        select 1 from fact_gasto f
-                        where split_part(f.url_bdns, '/convocatorias/', 2) = b.numero_convocatoria
-                    )
+                    where {_NO_PUBLICADO_EN_IATI}
                     group by b.iso_alpha3
                 ) b
-                where b.iso_alpha3 is not null
-                  and exists (select 1 from dim_pais p where p.iso_alpha3 = b.iso_alpha3)
+                join dim_pais p on p.iso_alpha3 = b.iso_alpha3
                 order by b.importe_eur desc
             """)
             por_pais = cur.fetchall()
 
-            cur.execute("""
+            cur.execute(f"""
                 select coalesce(sum(b.importe_eur), 0) as importe_eur,
                        coalesce(count(*), 0) as n_concesiones
                 from fact_gasto_aecid_bdns b
-                where not exists (
-                    select 1 from fact_gasto f
-                    where split_part(f.url_bdns, '/convocatorias/', 2) = b.numero_convocatoria
-                )
+                where {_NO_PUBLICADO_EN_IATI}
                 and (
                     b.iso_alpha3 is null
                     or not exists (select 1 from dim_pais p where p.iso_alpha3 = b.iso_alpha3)

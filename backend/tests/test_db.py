@@ -543,7 +543,7 @@ def test_ccaa_por_anio_returns_yearly_totals(monkeypatch):
 
 def test_resumen_aecid_bdns_excluye_lo_ya_publicado_en_iati(monkeypatch):
     rows = [
-        {"iso_alpha3": "CRI", "importe_eur": 261818.6, "n_concesiones": 1},
+        {"iso_alpha3": "CRI", "pais_nombre": "Costa Rica", "importe_eur": 261818.6, "n_concesiones": 1},
     ]
     cursor = FakeCursor(rows)
     conn = FakeConnection(cursor)
@@ -559,6 +559,7 @@ def test_resumen_aecid_bdns_excluye_lo_ya_publicado_en_iati(monkeypatch):
     assert "url_bdns" in sql
     assert "split_part" in sql
     assert "dim_pais" in sql
+    assert "p.nombre as pais_nombre" in sql
 
 
 def test_resumen_aecid_bdns_separa_sin_pais(monkeypatch):
