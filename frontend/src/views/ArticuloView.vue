@@ -11,13 +11,21 @@ const articulo = computed(() => articulos.find((a) => a.slug === String(route.pa
 watch(
   articulo,
   (actual) => {
-    if (!actual) return
-    aplicarHead({
-      titulo: actual.titulo,
-      descripcion: actual.descripcion,
-      indexable: true,
-      ruta: `/analisis/${actual.slug}`,
-    })
+    if (actual) {
+      aplicarHead({
+        titulo: actual.titulo,
+        descripcion: actual.descripcion,
+        indexable: true,
+        ruta: `/analisis/${actual.slug}`,
+      })
+    } else {
+      aplicarHead({
+        titulo: 'Artículo no encontrado',
+        descripcion: 'El artículo que buscas no existe o ha cambiado de dirección.',
+        indexable: false,
+        ruta: route.path,
+      })
+    }
   },
   { immediate: true },
 )
