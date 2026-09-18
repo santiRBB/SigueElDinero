@@ -18,6 +18,8 @@ const router = createRouter({
     { path: '/proyectos', name: 'proyectos', component: () => import('../views/ProyectosView.vue'), meta: metaDe('/proyectos') },
     { path: '/paises/:iso3', name: 'pais', component: () => import('../views/PaisView.vue'), meta: metaDe('/paises/:iso3') },
     { path: '/ccaa/:codigoIne', name: 'ccaa', component: () => import('../views/CcaaView.vue'), meta: metaDe('/ccaa/:codigoIne') },
+    { path: '/analisis', name: 'analisis', component: () => import('../views/AnalisisView.vue'), meta: metaDe('/analisis') },
+    { path: '/analisis/:slug', name: 'articulo', component: () => import('../views/ArticuloView.vue'), meta: metaDe('/analisis/:slug') },
     { path: '/sobre', name: 'sobre', component: () => import('../views/SobreView.vue'), meta: metaDe('/sobre') },
     { path: '/cookies', name: 'cookies', component: () => import('../views/PoliticaCookiesView.vue'), meta: metaDe('/cookies') },
   ],
