@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { articulos } from 'virtual:analisis'
 import { aplicarHead } from '../utils/head'
+import AdSlot from '../components/AdSlot.vue'
 
 const route = useRoute()
 const articulo = computed(() => articulos.find((a) => a.slug === String(route.params.slug)) ?? null)
@@ -40,6 +41,7 @@ function formatFechaLarga(iso: string): string {
     </section>
     <!-- eslint-disable-next-line vue/no-v-html -->
     <article class="prose prose-estrecha" v-html="articulo.html" />
+    <AdSlot :contenido-listo="true" />
   </template>
   <section v-else class="page-head">
     <h1 class="h-page">Artículo no encontrado</h1>

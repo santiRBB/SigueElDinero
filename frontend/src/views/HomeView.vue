@@ -7,6 +7,7 @@ import WorldMap from '../components/WorldMap.vue'
 import StatTile from '../components/StatTile.vue'
 import YearBars from '../components/YearBars.vue'
 import BarList from '../components/BarList.vue'
+import AdSlot from '../components/AdSlot.vue'
 import { formatEURCompacto } from '../utils/formato'
 
 const store = useGastoStore()
@@ -62,6 +63,10 @@ function onCountryClick(iso3: string) {
 function onSelectYear(anio: number) {
   store.setFiltroAnio(store.filtroAnio === anio ? null : anio)
 }
+
+const contenidoListo = computed(
+  () => !store.cargando && !store.error && store.paisesResumen.length > 0,
+)
 </script>
 
 <template>
@@ -120,6 +125,7 @@ function onSelectYear(anio: number) {
       <BarList :filas="filasGrupos" />
     </div>
   </section>
+  <AdSlot :contenido-listo="contenidoListo" />
 </template>
 
 <style scoped>

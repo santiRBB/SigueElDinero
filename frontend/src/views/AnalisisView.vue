@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { articulos } from 'virtual:analisis'
+import AdSlot from '../components/AdSlot.vue'
 
 function formatFechaLarga(iso: string): string {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString('es-ES', {
@@ -28,6 +29,7 @@ function formatFechaLarga(iso: string): string {
       <p class="fecha">{{ formatFechaLarga(articulo.fecha) }}</p>
     </li>
   </ul>
+  <AdSlot :contenido-listo="true" />
 </template>
 
 <style scoped>

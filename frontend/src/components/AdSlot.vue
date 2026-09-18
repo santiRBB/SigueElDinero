@@ -1,30 +1,41 @@
 <script setup lang="ts">
-import { nextTick, onMounted, watch } from 'vue'
+import { computed, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { adsConsent, openCookiePreferences } from '../utils/cookieConsent'
 
+const props = defineProps<{ contenidoListo: boolean }>()
+
+const route = useRoute()
 const adClientId = import.meta.env.VITE_ADSENSE_PUBLISHER_ID as string | undefined
 const adSlotId = import.meta.env.VITE_ADSENSE_SLOT_ID as string | undefined
-const hasAdConfig = Boolean(adClientId && adSlotId)
+const hayConfig = Boolean(adClientId && adSlotId)
 
-function requestAd(): void {
-  if (!window.matchMedia('(min-width: 1760px)').matches) return
+// Tres condiciones, y las tres tienen que cumplirse: la ruta debe ser apta, el contenido del editor
+// debe estar ya en pantalla, y el usuario debe haber aceptado las cookies de publicidad. Sin esto,
+// AdSense marca el sitio por servir anuncios en pantallas sin contenido.
+const huecoVisible = computed(() => route.meta.anuncios === true && props.contenidoListo)
+const muestraAnuncio = computed(() => huecoVisible.value && adsConsent.value && hayConfig)
+const muestraAviso = computed(() => huecoVisible.value && !adsConsent.value && hayConfig)
+
+function pedirAnuncio(): void {
   window.adsbygoogle = window.adsbygoogle || []
   window.adsbygoogle.push({})
 }
 
-onMounted(() => {
-  if (adsConsent.value && hasAdConfig) void nextTick(requestAd)
-})
-
-watch(adsConsent, (accepted) => {
-  if (accepted && hasAdConfig) void nextTick(requestAd)
-})
+watch(
+  muestraAnuncio,
+  (activo) => {
+    if (activo) void nextTick(pedirAnuncio)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
-  <aside class="ad-slot">
+  <aside v-if="muestraAnuncio" class="ad-slot">
+    <p class="ad-label">Publicidad</p>
     <ins
-      v-if="adsConsent && hasAdConfig"
+      :key="route.path"
       class="adsbygoogle"
       style="display: block"
       :data-ad-client="adClientId"
@@ -32,26 +43,26 @@ watch(adsConsent, (accepted) => {
       data-ad-format="auto"
       data-full-width-responsive="true"
     />
-    <div v-else-if="!adsConsent" class="ad-placeholder">
-      <p>Apoya el proyecto viendo anuncios.</p>
-      <button type="button" @click="openCookiePreferences">Configurar cookies</button>
-    </div>
+  </aside>
+  <aside v-else-if="muestraAviso" class="ad-slot ad-placeholder">
+    <p>Apoya el proyecto viendo anuncios.</p>
+    <button type="button" @click="openCookiePreferences">Configurar cookies</button>
   </aside>
 </template>
 
 <style scoped>
 .ad-slot {
-  display: none;
+  margin: 46px auto 0;
+  max-width: 728px;
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
 }
-@media (min-width: 1760px) {
-  .ad-slot {
-    display: block;
-    position: fixed;
-    right: 24px;
-    bottom: 96px;
-    width: 280px;
-    z-index: 15;
-  }
+.ad-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 0 0 10px;
 }
 .ad-placeholder {
   border: 1px solid var(--rule);

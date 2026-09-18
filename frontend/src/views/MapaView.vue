@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
 import WorldMap from '../components/WorldMap.vue'
 import FilterBar from '../components/FilterBar.vue'
 import CountryTable from '../components/CountryTable.vue'
+import AdSlot from '../components/AdSlot.vue'
 import { formatEURCompacto } from '../utils/formato'
 
 const store = useGastoStore()
@@ -17,6 +18,10 @@ onMounted(() => {
 function onCountryClick(iso3: string) {
   router.push(`/paises/${iso3}`)
 }
+
+const contenidoListo = computed(
+  () => !store.cargando && !store.error && store.paisesResumen.length > 0,
+)
 </script>
 
 <template>
@@ -39,6 +44,7 @@ function onCountryClick(iso3: string) {
     </h2>
     <CountryTable :paises="store.paisesResumen" />
   </section>
+  <AdSlot :contenido-listo="contenidoListo" />
 </template>
 
 <style scoped>
