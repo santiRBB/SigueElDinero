@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { cargarArticulos, parsearFrontmatter } from './analisis'
+import { cargarArticulos, parsearFrontmatter, type Articulo } from './analisis.js'
 
 function directorioCon(ficheros: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'analisis-'))
@@ -46,7 +46,7 @@ describe('cargarArticulos', () => {
       'viejo.md': '---\ntitulo: Viejo\ndescripcion: d\nfecha: 2026-01-01\nresumen: r\n---\nx\n',
       'nuevo.md': '---\ntitulo: Nuevo\ndescripcion: d\nfecha: 2026-09-18\nresumen: r\n---\nx\n',
     })
-    expect(cargarArticulos(dir).map((a) => a.slug)).toEqual(['nuevo', 'viejo'])
+    expect(cargarArticulos(dir).map((a: Articulo) => a.slug)).toEqual(['nuevo', 'viejo'])
   })
 
   it('falla si a un artículo le falta una clave obligatoria', () => {

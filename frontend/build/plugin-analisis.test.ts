@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Articulo } from './analisis'
-import { cuerpoArticulo, cuerpoIndice } from './plugin-analisis'
+import type { Articulo } from './analisis.js'
+import { cuerpoArticulo, cuerpoIndice } from './plugin-analisis.js'
 
 function articulo(sobrescribir: Partial<Articulo> = {}): Articulo {
   return {

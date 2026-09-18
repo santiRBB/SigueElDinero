@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { componerPagina, componerSitemap } from './prerender'
+import { componerPagina, componerSitemap } from './prerender.js'
 
 const PLANTILLA = [
   '<!doctype html>',
