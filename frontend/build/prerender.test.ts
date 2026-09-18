@@ -6,6 +6,12 @@ const PLANTILLA = [
   '<html lang="es"><head>',
   '<meta name="description" content="Descripción del sitio" />',
   '<link rel="canonical" href="https://sigueeldinero.es/" />',
+  '<meta property="og:title" content="Sigue el dinero" />',
+  '<meta',
+  '  property="og:description"',
+  '  content="Descripción del sitio para redes"',
+  '/>',
+  '<meta property="og:url" content="https://sigueeldinero.es/" />',
   '<title>Sigue el dinero — Cooperación española</title>',
   '</head><body>',
   '<div id="app"><!--respaldo--><div class="respaldo">Respaldo</div><!--/respaldo--></div>',
@@ -37,6 +43,18 @@ describe('componerPagina', () => {
     )
   })
 
+  it('sustituye las etiquetas Open Graph por los valores de la página, no los de portada', () => {
+    const html = componerPagina(PLANTILLA, pagina)
+    expect(html).toContain('<meta property="og:title" content="Qué es IATI — Sigue el dinero" />')
+    expect(html).toContain('<meta property="og:description" content="Una descripción del artículo" />')
+    expect(html).toContain(
+      '<meta property="og:url" content="https://sigueeldinero.es/analisis/que-es-iati" />',
+    )
+    expect(html).not.toContain('og:title" content="Sigue el dinero"')
+    expect(html).not.toContain('Descripción del sitio para redes')
+    expect(html).not.toContain('og:url" content="https://sigueeldinero.es/"')
+  })
+
   it('sustituye el bloque de respaldo por el cuerpo, conservando los marcadores', () => {
     const html = componerPagina(PLANTILLA, pagina)
     expect(html).toContain('Texto real del artículo.')
@@ -53,6 +71,35 @@ describe('componerPagina', () => {
     expect(() => componerPagina('<html><body><div id="app"></div></body></html>', pagina)).toThrow(
       /respaldo/i,
     )
+  })
+
+  it('falla nombrando la etiqueta si no hay un <title> reconocible', () => {
+    const plantillaSinTitulo = PLANTILLA.replace(
+      '<title>Sigue el dinero — Cooperación española</title>',
+      '<h1>Sin título</h1>',
+    )
+    expect(() => componerPagina(plantillaSinTitulo, pagina)).toThrow(/title/i)
+  })
+
+  it('falla nombrando la etiqueta si el atributo name de la descripción cambia de posición', () => {
+    const plantillaReordenada = PLANTILLA.replace(
+      '<meta name="description" content="Descripción del sitio" />',
+      '<meta content="Descripción del sitio" name="description" />',
+    )
+    expect(() => componerPagina(plantillaReordenada, pagina)).toThrow(/description/i)
+  })
+
+  it('falla nombrando la etiqueta si falta la canonical', () => {
+    const plantillaSinCanonical = PLANTILLA.replace(
+      '<link rel="canonical" href="https://sigueeldinero.es/" />',
+      '',
+    )
+    expect(() => componerPagina(plantillaSinCanonical, pagina)).toThrow(/canonical/i)
+  })
+
+  it('falla nombrando la etiqueta si falta una etiqueta Open Graph', () => {
+    const plantillaSinOgTitle = PLANTILLA.replace('<meta property="og:title" content="Sigue el dinero" />', '')
+    expect(() => componerPagina(plantillaSinOgTitle, pagina)).toThrow(/og:title/i)
   })
 })
 
