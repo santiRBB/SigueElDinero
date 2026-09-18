@@ -25,6 +25,14 @@ describe('cuerpoArticulo', () => {
     const html = cuerpoArticulo(articulo({ html: '<p>Texto <strong>real</strong>.</p>' }))
     expect(html).toContain('<p>Texto <strong>real</strong>.</p>')
   })
+
+  it('usa las mismas clases que ArticuloView.vue, para que no haya reflow al hidratar', () => {
+    // ArticuloView.vue renderiza <article class="prose prose-estrecha">: si esta función se
+    // desincroniza de esa plantilla, la página prerenderizada pinta primero a ~1104px y salta
+    // a 720px en cuanto Vue monta — justo en las páginas que un revisor de AdSense va a leer.
+    const html = cuerpoArticulo(articulo())
+    expect(html).toContain('<article class="prose prose-estrecha">')
+  })
 })
 
 describe('cuerpoIndice', () => {

@@ -106,6 +106,6 @@ export function cuerpoArticulo(articulo: Articulo): string {
     `<h1 class="h-page">${escaparTexto(articulo.titulo)}</h1>`,
     `<p class="note"><time datetime="${fecha}">${fecha}</time></p>`,
     '</section>',
-    `<article class="prose">${articulo.html}</article>`,
+    `<article class="prose prose-estrecha">${articulo.html}</article>`,
   ].join('')
 }
