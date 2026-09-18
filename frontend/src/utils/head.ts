@@ -1,5 +1,5 @@
 import type { Router } from 'vue-router'
-import { META_RUTAS, NOMBRE_SITIO, ORIGEN } from '../router/meta'
+import { NOMBRE_SITIO, ORIGEN } from '../router/meta'
 
 export interface OpcionesHead {
   titulo: string
@@ -49,8 +49,11 @@ export function aplicarHead(opciones: OpcionesHead): void {
 
 export function instalarHead(router: Router): void {
   router.afterEach((to) => {
-    const meta = META_RUTAS[to.matched[to.matched.length - 1]?.path ?? to.path]
-    if (!meta) return
+    // `to.meta` es el objeto que cada ruta recibió vía `meta: metaDe(path)` en el router: se lee
+    // directamente en vez de volver a buscarlo en META_RUTAS por la ruta registrada, porque para
+    // el catch-all (`/:pathMatch(.*)*`) esa ruta registrada no coincide con ninguna clave de
+    // META_RUTAS (la clave es '/404') y la búsqueda por ruta nunca encontraría nada.
+    const meta = to.meta
     aplicarHead({
       titulo: meta.titulo,
       descripcion: meta.descripcion,

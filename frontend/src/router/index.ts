@@ -22,6 +22,12 @@ const router = createRouter({
     { path: '/analisis/:slug', name: 'articulo', component: () => import('../views/ArticuloView.vue'), meta: metaDe('/analisis/:slug') },
     { path: '/sobre', name: 'sobre', component: () => import('../views/SobreView.vue'), meta: metaDe('/sobre') },
     { path: '/cookies', name: 'cookies', component: () => import('../views/PoliticaCookiesView.vue'), meta: metaDe('/cookies') },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'no-encontrado',
+      component: () => import('../views/NoEncontradoView.vue'),
+      meta: metaDe('/404'),
+    },
   ],
   scrollBehavior(to) {
     if (to.hash && document.querySelector(to.hash)) {

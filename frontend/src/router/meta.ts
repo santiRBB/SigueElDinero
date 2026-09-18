@@ -69,6 +69,12 @@ export const META_RUTAS: Record<string, MetaRuta> = {
     indexable: false,
     anuncios: false,
   },
+  '/404': {
+    titulo: 'Página no encontrada',
+    descripcion: 'La página solicitada no existe.',
+    indexable: false,
+    anuncios: false,
+  },
 }
 
 export const RUTAS_INDEXABLES = Object.entries(META_RUTAS)
