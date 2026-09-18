@@ -111,4 +111,14 @@ describe('cookieConsent', () => {
     expect(config.onConsent).toBe(handleConsentUpdate)
     expect(config.onChange).toBe(handleConsentUpdate)
   })
+
+  it('initCookieConsent does not include hash-based href links in the consent configuration', () => {
+    initCookieConsent()
+    const config = vi.mocked(CookieConsent.run).mock.calls[0][0]
+    const translations = config.language?.translations as Record<string, unknown> | undefined
+    const esTranslations = translations?.es as Record<string, unknown> | undefined
+    const consentModal = esTranslations?.consentModal as Record<string, unknown> | undefined
+    const description = (consentModal?.description as string) || ''
+    expect(description).not.toMatch(/href="#/)
+  })
 })
