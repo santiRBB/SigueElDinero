@@ -1,20 +1,74 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="google-adsense-account" content="ca-pub-5112062667847619" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Cuánto dinero destina España a la cooperación internacional, a qué países y en qué sectores. Datos oficiales de AECID publicados en el estándar IATI."
+    />
+    <link rel="canonical" href="https://sigueeldinero.es/" />
+    <meta property="og:site_name" content="Sigue el dinero" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:title" content="Sigue el dinero" />
+    <meta
+      property="og:description"
+      content="Cuánto dinero destina España a la cooperación internacional, a qué países y en qué sectores."
+    />
+    <meta property="og:url" content="https://sigueeldinero.es/" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <title>SigueElDinero — Mapa de cooperación</title>
+    <title>Sigue el dinero — Cooperación española</title>
+    <style>
+      .respaldo {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 64px 28px;
+        font-family: 'Newsreader', Georgia, serif;
+        color: #16191c;
+      }
+      .respaldo h1 {
+        font-size: 40px;
+        line-height: 1.1;
+        margin: 0 0 20px;
+      }
+      .respaldo p {
+        font-size: 18px;
+        line-height: 1.6;
+        margin: 0 0 18px;
+      }
+      .respaldo ul {
+        padding-left: 20px;
+        line-height: 1.9;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"><!--respaldo-->
+      <div class="respaldo">
+        <h1>Sigue el dinero</h1>
+        <p>
+          Mapa de la cooperación internacional española: cuánto dinero destina España a cada país, en
+          qué sectores y a través de qué entidades ejecutoras. Los datos proceden de las actividades
+          que la Agencia Española de Cooperación Internacional para el Desarrollo publica en el
+          estándar IATI, y de las concesiones registradas en la Base de Datos Nacional de
+          Subvenciones.
+        </p>
+        <ul>
+          <li><a href="/mapa">El reparto, país a país</a></li>
+          <li><a href="/proyectos">Buscador de proyectos</a></li>
+          <li><a href="/analisis">Análisis</a></li>
+          <li><a href="/sobre">Sobre los datos</a></li>
+        </ul>
+      </div>
+    <!--/respaldo--></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
