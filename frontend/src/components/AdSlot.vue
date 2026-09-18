@@ -22,10 +22,16 @@ function pedirAnuncio(): void {
   window.adsbygoogle.push({})
 }
 
+// route.path entra en las fuentes del watcher, no solo route.meta.anuncios en el computed:
+// cuando Vue Router reutiliza esta misma instancia entre dos rutas del mismo registro (dos
+// artículos de /analisis/:slug, por ejemplo), muestraAnuncio no cambia de valor y por tanto
+// nunca dispararía este watcher por sí solo, aunque el :key="route.path" del <ins> sí monte
+// un nodo nuevo. Sin este segundo disparador, ese nodo nuevo nunca se procesa: un hueco de
+// anuncio vacío en silencio para siempre.
 watch(
-  muestraAnuncio,
-  (activo) => {
-    if (activo) void nextTick(pedirAnuncio)
+  [muestraAnuncio, () => route.path],
+  () => {
+    if (muestraAnuncio.value) void nextTick(pedirAnuncio)
   },
   { immediate: true },
 )

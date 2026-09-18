@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import { mount } from '@vue/test-utils'
 
 vi.mock('vanilla-cookieconsent', () => ({
@@ -8,7 +9,10 @@ vi.mock('vanilla-cookieconsent', () => ({
   acceptedCategory: vi.fn(),
 }))
 
-const rutaActual = { path: '/mapa', meta: { anuncios: true } as { anuncios: boolean } }
+// reactive(): igual que el objeto real que devuelve vue-router. Con un objeto plano, mutar
+// rutaActual.path en el test de abajo no dispararía el watcher de route.path del componente,
+// porque no habría ninguna dependencia reactiva que rastrear.
+const rutaActual = reactive({ path: '/mapa', meta: { anuncios: true } as { anuncios: boolean } })
 vi.mock('vue-router', () => ({ useRoute: () => rutaActual }))
 
 import * as CookieConsent from 'vanilla-cookieconsent'
@@ -126,5 +130,23 @@ describe('AdSlot', () => {
     await wrapper.find('.ad-placeholder button').trigger('click')
 
     expect(CookieConsent.showPreferences).toHaveBeenCalledTimes(1)
+  })
+
+  it('solicita un anuncio nuevo cuando la misma instancia cambia de ruta', async () => {
+    adsConsent.value = true
+    wrapper = montar(true)
+    await wrapper.vm.$nextTick()
+    expect(window.adsbygoogle).toHaveLength(1)
+
+    // Vue Router reutiliza la instancia del componente cuando solo cambia el parámetro de
+    // una misma ruta (p. ej. entre dos artículos de /analisis/:slug): no hay desmontaje, así
+    // que muestraAnuncio nunca deja de ser true y su watcher no vuelve a dispararse por sí
+    // solo. El :key="route.path" del <ins> sí crea un nodo nuevo, pero un nodo nuevo sin un
+    // pedirAnuncio() nuevo es un hueco de anuncio vacío para siempre.
+    rutaActual.path = '/analisis/otro-articulo'
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(window.adsbygoogle).toHaveLength(2)
   })
 })
