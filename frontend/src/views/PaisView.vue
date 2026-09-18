@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
 import type { Orden } from '../services/api'
 import { detectarImportesEstandar, ordenarProyectos } from '../utils/proyectos'
+import { aplicarHead } from '../utils/head'
 import ProjectCard from '../components/ProjectCard.vue'
 import YearBars from '../components/YearBars.vue'
 import StatTile from '../components/StatTile.vue'
@@ -59,6 +60,19 @@ watch(() => store.filtroGrupo, () => {
   cargarDetalle()
   void store.cargarPaisPorAnio(iso3.value)
 })
+watch(
+  () => store.detallePais,
+  (detalle) => {
+    if (!detalle) return
+    aplicarHead({
+      titulo: `Cooperación española en ${detalle.pais.nombre}`,
+      descripcion: `Importe comprometido, sectores, entidades ejecutoras y proyectos de la cooperación española en ${detalle.pais.nombre}.`,
+      indexable: false,
+      ruta: `/paises/${detalle.pais.iso_alpha3}`,
+    })
+  },
+  { immediate: true },
+)
 
 function onCcaaClick(codigoIne: string) {
   router.push(`/ccaa/${codigoIne}`)

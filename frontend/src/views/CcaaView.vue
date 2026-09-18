@@ -2,6 +2,7 @@
 import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
+import { aplicarHead } from '../utils/head'
 import StatTile from '../components/StatTile.vue'
 import BarList from '../components/BarList.vue'
 import YearBars from '../components/YearBars.vue'
@@ -27,6 +28,19 @@ watch(codigoIne, () => {
   void store.cargarCcaaPorAnio(codigoIne.value)
 })
 watch(() => store.filtroAnio, cargarDetalle)
+watch(
+  () => store.detalleCcaa,
+  (detalle) => {
+    if (!detalle) return
+    aplicarHead({
+      titulo: `Subvenciones de cooperación en ${detalle.ccaa.nombre}`,
+      descripcion: `Concesiones de subvenciones públicas registradas en BDNS en ${detalle.ccaa.nombre}: importe, organismos concedentes y evolución por año.`,
+      indexable: false,
+      ruta: `/ccaa/${detalle.ccaa.codigo_ine}`,
+    })
+  },
+  { immediate: true },
+)
 
 const filasOrganismos = computed(() =>
   (store.detalleCcaa?.organismos ?? []).map((o) => ({ etiqueta: o.organismo, valor: o.importe_total_eur }))
