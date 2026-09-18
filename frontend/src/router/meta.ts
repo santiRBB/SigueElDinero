@@ -6,8 +6,6 @@ export interface MetaRuta {
   descripcion: string
   indexable: boolean
   anuncios: boolean
-  [key: string]: unknown
-  [key: symbol]: unknown
 }
 
 export const META_RUTAS: Record<string, MetaRuta> = {
