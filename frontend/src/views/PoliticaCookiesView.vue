@@ -49,6 +49,9 @@ import { openCookiePreferences } from '../utils/cookieConsent'
 </template>
 
 <style scoped>
+.prose {
+  max-width: 66ch;
+}
 .link-btn {
   all: unset;
   cursor: pointer;
