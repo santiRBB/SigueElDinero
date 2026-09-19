@@ -81,7 +81,7 @@ export function initCookieConsent(): void {
             description:
               'Usamos cookies solo para mostrar publicidad (Google AdSense) y el widget de apoyo ' +
               'al proyecto (Buy Me a Coffee). Ninguna de las dos se activa hasta que la aceptes. ' +
-              'Más detalles en la <a href="#/cookies">política de cookies</a>.',
+              'Más detalles en la <a href="/cookies">política de cookies</a>.',
             acceptAllBtn: 'Aceptar todo',
             acceptNecessaryBtn: 'Rechazar todo',
             showPreferencesBtn: 'Personalizar',

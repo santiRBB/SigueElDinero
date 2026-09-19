@@ -51,19 +51,6 @@ import { openCookiePreferences } from '../utils/cookieConsent'
 <style scoped>
 .prose {
   max-width: 66ch;
-  padding-top: 34px;
-}
-.prose p {
-  font-family: 'Newsreader', serif;
-  font-size: 18px;
-  line-height: 1.65;
-  color: #2b3034;
-}
-.prose h2 {
-  font-size: 20px;
-  margin: 34px 0 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--rule);
 }
 .link-btn {
   all: unset;

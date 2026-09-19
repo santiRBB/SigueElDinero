@@ -4,6 +4,7 @@ import { useGastoStore } from '../stores/gastoStore'
 import FilterBar from '../components/FilterBar.vue'
 import ProjectCard from '../components/ProjectCard.vue'
 import SortSelect from '../components/SortSelect.vue'
+import AdSlot from '../components/AdSlot.vue'
 import { formatEURCompacto } from '../utils/formato'
 
 const store = useGastoStore()
@@ -33,6 +34,9 @@ watch(
 
 const totalPaginas = computed(() => Math.max(1, Math.ceil(store.totalBusqueda / 30)))
 const totalPaginaActual = computed(() => store.resultadosBusqueda.reduce((acc, p) => acc + p.importe_pais_eur, 0))
+const contenidoListo = computed(
+  () => !store.cargandoBusqueda && !store.errorBusqueda && store.resultadosBusqueda.length > 0,
+)
 </script>
 
 <template>
@@ -78,6 +82,7 @@ const totalPaginaActual = computed(() => store.resultadosBusqueda.reduce((acc, p
       <button type="button" :disabled="store.paginaBusqueda >= totalPaginas" @click="irAPagina(store.paginaBusqueda + 1)">Siguiente →</button>
     </div>
   </section>
+  <AdSlot :contenido-listo="contenidoListo" />
 </template>
 
 <style scoped>

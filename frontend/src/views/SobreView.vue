@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useGastoStore } from '../stores/gastoStore'
+import AdSlot from '../components/AdSlot.vue'
 import { formatEUR, formatEURCompacto, formatFecha } from '../utils/formato'
 
 const route = useRoute()
@@ -156,24 +157,10 @@ const totalPaginasConcesiones = computed(() => Math.max(1, Math.ceil(store.total
       <button type="button" :disabled="store.paginaConcesionesAecidBdns >= totalPaginasConcesiones" @click="irAPaginaConcesiones(store.paginaConcesionesAecidBdns + 1)">Siguiente →</button>
     </div>
   </section>
+  <AdSlot :contenido-listo="true" />
 </template>
 
 <style scoped>
-.prose {
-  padding-top: 34px;
-}
-.prose p {
-  font-family: 'Newsreader', serif;
-  font-size: 18px;
-  line-height: 1.65;
-  color: #2b3034;
-}
-.prose h2 {
-  font-size: 20px;
-  margin: 34px 0 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--rule);
-}
 .error {
   margin: 14px 0 0;
   padding: 0.5rem 1rem;
