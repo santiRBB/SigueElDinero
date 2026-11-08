@@ -33,8 +33,12 @@ import re
 import time
 from pathlib import Path
 
+import diterator.iterator
 import httpx
+import requests
 from diterator import Iterator
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ingesta_aecid")
@@ -58,6 +62,47 @@ SIN_PAIS_PATH = OUTPUT_DIR / "actividades_sin_pais.jsonl"
 CRS_SECTORES_PATH = Path(__file__).parent / "crs_sectores.json"
 with open(CRS_SECTORES_PATH, "r", encoding="utf-8") as f:
     CRS_SECTORES = json.load(f)
+
+
+DPORTAL_TIMEOUT = (10, 120)  # (conexion, lectura) en segundos
+
+
+class _SesionConTimeout:
+    """Sustituto minimo del modulo `requests` dentro de diterator: solo expone `.get`."""
+
+    def __init__(self, session, timeout):
+        self._session = session
+        self._timeout = timeout
+
+    def get(self, url, **kwargs):
+        kwargs.setdefault("timeout", self._timeout)
+        return self._session.get(url, **kwargs)
+
+
+def instalar_reintentos_dportal(total=5, backoff_factor=2, timeout=DPORTAL_TIMEOUT):
+    """Hace que diterator reintente las paginas de d-portal ante 5xx o fallos de red.
+
+    diterator pide cada pagina con `requests.get` a pelo (sin reintentos ni timeout)
+    y ademas avanza el `offset` ANTES de comprobar el status, asi que capturar la
+    excepcion fuera y seguir iterando se saltaria 100 actividades en silencio. Por
+    eso el reintento tiene que ocurrir dentro de la propia peticion: sustituimos el
+    `requests` que usa diterator.iterator por una Session con urllib3 Retry.
+
+    Con backoff_factor=2 y total=5 las esperas son ~2, 4, 8, 16 s (~30 s en total).
+    Si el error persiste se devuelve la ultima respuesta y diterator lanza el
+    HTTPError de siempre, de modo que el job sigue fallando de forma visible.
+    """
+    retry = Retry(
+        total=total,
+        backoff_factor=backoff_factor,
+        status_forcelist=(500, 502, 503, 504),
+        allowed_methods=("GET",),
+        raise_on_status=False,
+    )
+    session = requests.Session()
+    session.mount("http://", HTTPAdapter(max_retries=retry))
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    diterator.iterator.requests = _SesionConTimeout(session, timeout)
 
 
 def get_amount_eur(activity):
@@ -145,6 +190,7 @@ def get_bdns_info(url_fuente, client=httpx):
 
 def main():
     RAW_DIR.mkdir(parents=True, exist_ok=True)
+    instalar_reintentos_dportal()
 
     n_actividades = 0
     n_filas_pais = 0
